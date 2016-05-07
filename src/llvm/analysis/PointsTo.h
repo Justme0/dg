@@ -6,6 +6,8 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include "analysis/PointsTo/PSS.h"
+#include "analysis/PointsTo/PointsToFlowSensitive.h"
+#include "analysis/PointsTo/PointsToFlowInsensitive.h"
 #include "llvm/analysis/PSS.h"
 
 namespace dg {
@@ -14,58 +16,15 @@ using analysis::pss::PSS;
 using analysis::pss::PSSNode;
 using analysis::pss::LLVMPSSBuilder;
 
-class LLVMPointsToAnalysis
-{
-protected:
-    PSS *impl;
-    LLVMPSSBuilder *builder;
-    LLVMPointsToAnalysis(const llvm::Module *M)
-        :builder(new LLVMPSSBuilder(M)) {}
-
-    // the real analysis that will run
-    void setImpl(PSS *im) { impl = im; }
-
-public:
-    LLVMPointsToAnalysis(PSS *p) : impl(p) {};
-    ~LLVMPointsToAnalysis() { delete builder; }
-
-    PSSNode *getNode(const llvm::Value *val)
-    {
-        return builder->getNode(val);
-    }
-
-    PSSNode *getPointsTo(const llvm::Value *val)
-    {
-        return builder->getPointsTo(val);
-    }
-
-    const std::unordered_map<const llvm::Value *, PSSNode *>&
-    getNodesMap() const
-    {
-        return builder->getNodesMap();
-    }
-
-    void getNodes(std::set<PSSNode *>& cont)
-    {
-        impl->getNodes(cont);
-    }
-
-    void run()
-    {
-        impl->setRoot(builder->buildLLVMPSS());
-        impl->run();
-    }
-};
-
 template <typename PTType>
-class LLVMPointsToAnalysisImpl : public PTType, public LLVMPointsToAnalysis
+class LLVMPointsToAnalysisImpl : public PTType
 {
+    LLVMPSSBuilder *builder;
+
 public:
-    LLVMPointsToAnalysisImpl(const llvm::Module* M)
-        : LLVMPointsToAnalysis(M)
-    {
-        setImpl(this);
-    };
+
+    LLVMPointsToAnalysisImpl(LLVMPSSBuilder *b)
+    :builder(b) {}
 
     // build new subgraphs on calls via pointer
     virtual bool functionPointerCall(PSSNode *callsite, PSSNode *called)
@@ -135,6 +94,76 @@ public:
         return false;
     }
     */
+};
+
+typedef LLVMPointsToAnalysisImpl<analysis::pss::PointsToFlowSensitive> LLVMPTAFlowSensitive;
+typedef LLVMPointsToAnalysisImpl<analysis::pss::PointsToFlowInsensitive> LLVMPTAFlowInsensitive;
+
+class LLVMPointsToAnalysis
+{
+protected:
+    PSS *pss;
+    LLVMPSSBuilder *builder;
+
+    LLVMPointsToAnalysis() :pss(nullptr), builder(nullptr) {}
+public:
+
+    virtual ~LLVMPointsToAnalysis()
+    {
+        delete pss;
+        delete builder;
+    }
+
+    PSSNode *getNode(const llvm::Value *val)
+    {
+        return builder->getNode(val);
+    }
+
+    PSSNode *getPointsTo(const llvm::Value *val)
+    {
+        return builder->getPointsTo(val);
+    }
+
+    const std::unordered_map<const llvm::Value *, PSSNode *>&
+    getNodesMap() const
+    {
+        return builder->getNodesMap();
+    }
+
+    void getNodes(std::set<PSSNode *>& cont)
+    {
+        pss->getNodes(cont);
+    }
+
+    void run()
+    {
+        assert(pss);
+        assert(builder);
+
+        pss->setRoot(builder->buildLLVMPSS());
+        pss->run();
+    }
+};
+
+class LLVMPointsToAnalysisFS : public LLVMPointsToAnalysis
+{
+public:
+    LLVMPointsToAnalysisFS(const llvm::Module *M)
+    {
+        builder = new LLVMPSSBuilder(M);
+        pss = new LLVMPTAFlowSensitive(builder);
+    }
+};
+
+class LLVMPointsToAnalysisFI : public LLVMPointsToAnalysis
+{
+
+public:
+    LLVMPointsToAnalysisFI(const llvm::Module *M)
+    {
+        builder = new LLVMPSSBuilder(M);
+        pss = new LLVMPTAFlowInsensitive(builder);
+    }
 };
 
 }

@@ -540,9 +540,9 @@ public:
         LLVMDependenceGraph d;
 
         if (pta == PTA_FS)
-            PTA = new LLVMPointsToAnalysisImpl<analysis::pss::PointsToFlowSensitive>(M);
+            PTA = new LLVMPointsToAnalysisFS(M);
         else if (pta == PTA_FI)
-            PTA = new LLVMPointsToAnalysisImpl<analysis::pss::PointsToFlowInsensitive>(M);
+            PTA = new LLVMPointsToAnalysisFI(M);
         else
             assert(0 && "Should not be reached");
 

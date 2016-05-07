@@ -233,10 +233,10 @@ int main(int argc, char *argv[])
 
     debug::TimeMeasure tm;
 
-    LLVMPointsToAnalysis *PTAfs;
-    LLVMPointsToAnalysis *PTAfi;
+    LLVMPointsToAnalysis *PTAfs = nullptr;
+    LLVMPointsToAnalysis *PTAfi = nullptr;
     if (type & FLOW_INSENSITIVE) {
-        PTAfi = new LLVMPointsToAnalysisImpl<analysis::pss::PointsToFlowInsensitive>(M);
+        PTAfi = new LLVMPointsToAnalysisFI(M);
 
         tm.start();
         PTAfi->run();
@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
     }
 
     if (type & FLOW_SENSITIVE) {
-            PTAfs = new LLVMPointsToAnalysisImpl<analysis::pss::PointsToFlowSensitive>(M);
+            PTAfs = new LLVMPointsToAnalysisFS(M);
         tm.start();
         PTAfs->run();
         tm.stop();
@@ -258,6 +258,9 @@ int main(int argc, char *argv[])
         if (ret == 0)
             llvm::errs() << "FS is a subset of FI, all OK\n";
     }
+
+    delete PTAfi;
+    delete PTAfs;
 
     return ret;
 }
