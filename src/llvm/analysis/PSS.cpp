@@ -358,6 +358,7 @@ LLVMPSSBuilder::createRealloc(const llvm::CallInst *CInst)
 
     reall->addSuccessor(mcp);
     addNode(CInst, reall);
+    addUnmappedNode(mcp);
 
     return std::make_pair(reall, mcp);
 }
@@ -465,6 +466,7 @@ LLVMPSSBuilder::createOrGetSubgraph(const llvm::CallInst *CInst,
 {
     std::pair<PSSNode *, PSSNode *> cf = createCallToFunction(CInst, F);
     addNode(CInst, cf.first);
+    addUnmappedNode(cf.second);
 
     // NOTE: we do not add return node into nodes_map, since this
     // is artificial node and does not correspond to any real node
@@ -553,6 +555,9 @@ LLVMPSSBuilder::createVarArg(const llvm::IntrinsicInst *Inst)
     PSSNode *S2 = new PSSNode(pss::STORE, arg, vastart);
 
     addNode(Inst, vastart);
+    addUnmappedNode(ptr);
+    addUnmappedNode(S1);
+    addUnmappedNode(S2);
 
     vastart->addSuccessor(S1);
     S1->addSuccessor(S2);
@@ -660,6 +665,7 @@ LLVMPSSBuilder::createCall(const llvm::Instruction *Inst)
 
         call_funcptr->addSuccessor(ret_call);
         addNode(CInst, call_funcptr);
+        addUnmappedNode(ret_call);
 
         return std::make_pair(call_funcptr, ret_call);
     }
@@ -1409,6 +1415,9 @@ LLVMPSSBuilder::createMemSet(const llvm::Instruction *Inst)
     PSSNode *S = new PSSNode(pss::STORE, val, G);
     G->addSuccessor(S);
 
+    addUnmappedNode(G);
+    addUnmappedNode(S);
+
     return std::make_pair(G, S);
 }
 
@@ -1571,9 +1580,12 @@ PSSNode *LLVMPSSBuilder::buildLLVMPSS(const llvm::Function& F)
     // create root and (unified) return nodes of this subgraph. These are
     // just for our convenience when building the graph, they can be
     // optimized away later since they are noops
-    // XXX: do we need entry type?
     PSSNode *root = new PSSNode(pss::ENTRY);
     PSSNode *ret = new PSSNode(pss::NOOP);
+
+    // free the memory at the end
+    addUnmappedNode(root);
+    addUnmappedNode(ret);
 
     // now build the arguments of the function - if it has any
     std::pair<PSSNode *, PSSNode *> args = buildArguments(F);
@@ -1724,7 +1736,6 @@ LLVMPSSBuilder::handleGlobalVariableInitializer(const llvm::Constant *C,
             if (Ty->isPointerTy()) {
                 PSSNode *op = getOperand(val);
                 PSSNode *target = new PSSNode(CONSTANT, node, off);
-                // FIXME: we're leaking the target
                 // NOTE: mabe we could do something like
                 // CONSTANT_STORE that would take Pointer instead of node??
                 // PSSNode(CONSTANT_STORE, op, Pointer(node, off)) or
@@ -1732,6 +1743,10 @@ LLVMPSSBuilder::handleGlobalVariableInitializer(const llvm::Constant *C,
                 PSSNode *store = new PSSNode(STORE, op, target);
                 store->insertAfter(last);
                 last = store;
+
+                // so that we delete the nodes at exit
+                addUnmappedNode(target);
+                addUnmappedNode(store);
             }
 
             off += DL->getTypeAllocSize(Ty);
@@ -1740,10 +1755,11 @@ LLVMPSSBuilder::handleGlobalVariableInitializer(const llvm::Constant *C,
        if (C->getType()->isPointerTy()) {
            PSSNode *value = getOperand(C);
            assert(value->pointsTo.size() == 1 && "BUG: We should have constant");
-           // FIXME: we're leaking the target
            PSSNode *store = new PSSNode(STORE, value, node);
            store->insertAfter(last);
            last = store;
+
+           addUnmappedNode(store);
        }
     } else if (!isa<ConstantInt>(C)) {
         llvm::errs() << *C << "\n";
@@ -1788,6 +1804,7 @@ std::pair<PSSNode *, PSSNode *> LLVMPSSBuilder::buildGlobals()
             // assume that it can point everywhere
             cur = new PSSNode(pss::STORE, UNKNOWN_MEMORY, node);
             cur->insertAfter(node);
+            addUnmappedNode(cur);
         }
     }
 

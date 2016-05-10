@@ -358,5 +358,7 @@ int main(int argc, char *argv[])
     tm.report("INFO: Points-to analysis [new] took");
     dumpPSS(PTA, type, todot);
 
+    delete PTA;
+
     return 0;
 }

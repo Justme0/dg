@@ -45,6 +45,9 @@ class LLVMPSSBuilder
     std::unordered_map<const llvm::Value *, PSSNode *> nodes_map;
     // map of all built subgraphs - the value type is a pair (root, return)
     std::unordered_map<const llvm::Value *, Subgraph> subgraphs_map;
+    // set of nodes that we created, but that does not correspond
+    // to any real node (thus are not suitable to be in nodes_map
+    std::set<PSSNode *> unmapped_nodes;
 
     // here we'll keep first and last nodes of every built block and
     // connected together according to successors
@@ -67,6 +70,12 @@ public:
 
     ~LLVMPSSBuilder()
     {
+        for (auto it : nodes_map)
+            delete it.second;
+
+        for (PSSNode *n : unmapped_nodes)
+            delete n;
+
         delete DL;
     }
 
@@ -113,6 +122,11 @@ private:
     {
         nodes_map[val] = node;
         node->setUserData(const_cast<llvm::Value *>(val));
+    }
+
+    void addUnmappedNode(PSSNode *node)
+    {
+        unmapped_nodes.insert(node);
     }
 
     bool isRelevantInstruction(const llvm::Instruction& Inst);
