@@ -64,5 +64,13 @@ tools/*.bc
 tools/llvm-dg-dump
 tools/llvm-to-source
 tools/llvm-slicer
+tools/llvm-ps-dump
+tools/llvm-pta-compare
+tools/llvm-rd-dump
+
+DartConfiguration.tcl
 
 git-version.h
+
+# YouCompleteMe build file
+.ycm_extra_conf.pyc
