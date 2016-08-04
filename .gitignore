@@ -74,3 +74,6 @@ git-version.h
 
 # YouCompleteMe build file
 .ycm_extra_conf.pyc
+
+# Shapechecker's output directory
+tool_output
