@@ -113,9 +113,9 @@ enum PtaType {
 
 class CommentDBG : public llvm::AssemblyAnnotationWriter
 {
-    LLVMReachingDefinitions *RD;
     LLVMDependenceGraph *dg;
     uint32_t opts;
+    LLVMReachingDefinitions *RD;
 
     void printValue(const llvm::Value *val,
                     llvm::formatted_raw_ostream& os,
@@ -343,7 +343,7 @@ class CommentDBG : public llvm::AssemblyAnnotationWriter
 public:
     CommentDBG(LLVMDependenceGraph *dg, uint32_t o = ANNOTATE_DD,
                LLVMReachingDefinitions *rd = nullptr)
-        :dg(dg), RD(rd), opts(o) {}
+        :dg(dg), opts(o), RD(rd) {}
 
     virtual void emitInstructionAnnot(const llvm::Instruction *I,
                                       llvm::formatted_raw_ostream& os)
@@ -463,9 +463,6 @@ protected:
     // shared by old and new analyses
     bool sliceGraph(LLVMDependenceGraph &d, const char *slicing_criterion)
     {
-        debug::TimeMeasure tm;
-        std::set<LLVMNode *> callsites;
-
         // verify if the graph is built correctly
         // FIXME - do it optionally (command line argument)
         if (!d.verify()) {
@@ -478,15 +475,16 @@ protected:
         const char *sc[] = {
             slicing_criterion,
             "klee_assume",
-            NULL // termination
+            nullptr // termination
         };
 
+        std::set<LLVMNode *> callsites;
         // check for slicing criterion here, because
         // we might have built new subgraphs that contain
         // it during points-to analysis
-        bool ret = d.getCallSites(sc, &callsites);
+        bool has_call_sites = d.getCallSites(sc, &callsites);
         bool got_slicing_criterion = true;
-        if (!ret) {
+        if (!has_call_sites) {
             if (strcmp(slicing_criterion, "ret") == 0) {
                 callsites.insert(d.getExit());
             } else {
@@ -516,6 +514,7 @@ protected:
         // FIXME: do this optional
         slicer.keepFunctionUntouched("klee_assume");
 
+        debug::TimeMeasure tm;
         tm.start();
         for (LLVMNode *start : callsites)
             slid = slicer.mark(start, slid);
@@ -581,10 +580,10 @@ public:
     bool slice(const char *slicing_criterion)
     {
         debug::TimeMeasure tm;
-        LLVMDependenceGraph d;
-
         tm.start();
 
+        // 2016.8.1 jiangg comment
+        // 1. Do points-to analysis and record running time.
         if (pta == PTA_FS)
             PTA->run<analysis::pta::PointsToFlowSensitive>();
         else if (pta == PTA_FI)
@@ -595,8 +594,11 @@ public:
         tm.stop();
         tm.report("INFO: Points-to analysis took");
 
+        // 2. Use points-to analysis result to build dependence graph of moudule.
+        LLVMDependenceGraph d;
         d.build(&*M, PTA);
 
+        // 3. Use dependence graph and slicing criterion to do program slicing.
         return sliceGraph(d, slicing_criterion);
         // FIXME: we're leaking PTA & RD
     }
@@ -635,10 +637,8 @@ public:
 
     bool slice(const char *slicing_criterion)
     {
-        debug::TimeMeasure tm;
+        // 1. build the dependence graph
         LLVMDependenceGraph d;
-
-        // build the graph
         d.build(&*M);
 
         // verify if the graph is built correctly
@@ -646,13 +646,16 @@ public:
         if (!d.verify())
             errs() << "ERR: verifying failed\n";
 
+        // 2. build points-to analysis
         analysis::LLVMPointsToAnalysis PTA(&d);
 
+        debug::TimeMeasure tm;
         tm.start();
         PTA.run();
         tm.stop();
         tm.report("INFO: Points-to analysis [old] took");
 
+        // 3. do slicing
         return sliceGraph(d, slicing_criterion);
     }
 };
@@ -704,7 +707,7 @@ static bool remove_unused_from_module(llvm::Module *M)
     // do not slice away these functions no matter what
     // FIXME do it a vector and fill it dynamically according
     // to what is the setup (like for sv-comp or general..)
-    const char *keep[] = {"main", "klee_assume", NULL};
+    const char *keep[] = {"main", "klee_assume", nullptr};
 
     // when erasing while iterating the slicer crashes
     // so set the to be erased values into container
