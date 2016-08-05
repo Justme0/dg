@@ -472,6 +472,7 @@ protected:
 
         // FIXME add command line switch -svcomp and
         // do this only with -svcomp switch
+        // "sv-comp" means Competition of Software Verification
         const char *sc[] = {
             slicing_criterion,
             "klee_assume",
