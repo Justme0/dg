@@ -67,12 +67,11 @@ puts "Compiling #{src} to #{ir_bc}...".brown
 puts "Done.\n".green
 
 puts "Slicing #{ir_bc} to #{slice_bc}...".brown
-system("./llvm-slicer -c #{options[:criterion]} #{ir_bc}")
+system("./llvm-slicer -o #{slice_bc} -c #{options[:criterion]} #{ir_bc}")
 abort unless $?.success?
 puts "Done.\n".green
 
 # get sliced IR
-`cp -f #{base}.sliced #{slice_bc}`
 `llvm-dis #{slice_bc} -o #{slice_ll}`
 abort unless $?.success?
 
