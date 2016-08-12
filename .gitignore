@@ -61,6 +61,9 @@ tests/*-test
 tools/*.c
 tools/*.bc
 
+tools/a.*
+tools/b.*
+
 tools/llvm-dg-dump
 tools/llvm-to-source
 tools/llvm-slicer
