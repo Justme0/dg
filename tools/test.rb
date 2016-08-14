@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require 'optparse'
+require "optparse"
 
 options = {}
 OptionParser.new do |opts|
@@ -57,23 +57,19 @@ ir_bc = base + ".bc"                 # main.bc
 slice_ll = base + "_slice.ll"        # main_slice.ll
 slice_bc = base + "_slice.bc"        # main_slice.bc
 
-puts "Compiling #{src} to #{ir_ll}...".brown
-`clang -S -g -emit-llvm #{src} -o #{ir_ll}`
-abort unless $?.success?
+puts "Compile #{src} to #{ir_bc}...".brown
+system "clang -c -g -emit-llvm #{src} -o #{ir_bc}" or abort
+puts "Done.\n".green
+puts "Compile #{src} to #{ir_ll}...".brown
+system "llvm-dis #{ir_bc} -o #{ir_ll}" or abort
 puts "Done.\n".green
 
-puts "Compiling #{src} to #{ir_bc}...".brown
-`clang -c -g -emit-llvm #{src} -o #{ir_bc}`
-puts "Done.\n".green
-
-puts "Slicing #{ir_bc} to #{slice_bc}...".brown
-system("./llvm-slicer -o #{slice_bc} -c #{options[:criterion]} #{ir_bc}")
-abort unless $?.success?
+puts "Slice #{ir_bc} to #{slice_bc}...".brown
+system "./llvm-slicer -o #{slice_bc} -c #{options[:criterion]} #{ir_bc}" or abort
 puts "Done.\n".green
 
 # get sliced IR
-`llvm-dis #{slice_bc} -o #{slice_ll}`
-abort unless $?.success?
+system "llvm-dis #{slice_bc} -o #{slice_ll}" or abort
 
 puts "All finished.".green
 puts "source file       : #{src}"
@@ -81,5 +77,5 @@ puts "IR before slicing : #{ir_ll} #{ir_bc}"
 puts "IR after slicing  : #{slice_ll} #{slice_bc}"
 
 if options[:diff]
-  system("vimdiff #{ir_ll} #{slice_ll}")
+  system "gvimdiff #{ir_ll} #{slice_ll}" or abort
 end
