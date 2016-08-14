@@ -1469,6 +1469,7 @@ void LLVMPointerSubgraphBuilder::addUnplacedInstructions(Subgraph& subg)
         const llvm::Value *val = node->getUserData<llvm::Value>();
 
         if (const llvm::Argument *arg = llvm::dyn_cast<llvm::Argument>(val)) {
+            (void)arg;
             // we created an argument - put it in to the end
             // of arguments of its function
 

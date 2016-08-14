@@ -10,10 +10,12 @@
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Value.h>
+#include <llvm/IR/Module.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
 
 #include "analysis/Slicing.h"
 #include "LLVMDependenceGraph.h"
@@ -100,28 +102,33 @@ public:
         // See #99
         dropAllUses(blk);
 
-
         // we also must drop refrences to instructions that are in
         // this block (or we would need to delete the blocks in
         // post-dominator order), see #101
         for (llvm::Instruction& Inst : *blk)
             dropAllUses(&Inst);
 
+        // 2016.08.12 jiangg
+        // often crash here
+        llvm::errs() << "Debug: erase basic block "
+                     << blk->getModule()->getName() << "::"
+                     << blk->getParent()->getName() << "::"
+                     << blk->getName() << " from its parent\n";
+        blk->dump();
+
         // finally, erase the block per se
         blk->eraseFromParent();
+
+        llvm::errs() << "Remove successfully\n";
     }
 
     // override slice method
-    uint32_t slice(LLVMNode *start, uint32_t sl_id = 0)
+    uint32_t slice(LLVMNode * /* start */, uint32_t /* sl_id */ = 0)
     {
-        (void) sl_id;
-        (void) start;
-
-        assert(0 && "Do not use this method with LLVM dg");
-        return 0;
+        llvm_unreachable("Do not use this method with LLVM dg");
     }
 
-    uint32_t slice(LLVMDependenceGraph *maindg,
+    uint32_t slice(LLVMDependenceGraph * /* maindg */,
                    LLVMNode *start, uint32_t sl_id = 0)
     {
         // mark nodes for slicing
@@ -150,6 +157,9 @@ private:
     {
         LLVMDGParameters *actualparams = callNode->getParameters();
         LLVMDGParameters *formalparams = graph->getParameters();
+        (void)slice_id;
+        (void)actualparams;
+        (void)formalparams;
 
         /*
         if (!actualparams) {
