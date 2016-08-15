@@ -674,19 +674,12 @@ void LLVMDependenceGraph::addFormalParameters()
     }
 }
 
-static bool array_match(llvm::StringRef name, const char *names[])
+static bool array_match(const std::string &name, const std::vector<std::string> &names)
 {
-    unsigned idx = 0;
-    while(names[idx]) {
-        if (name.equals(names[idx]))
-            return true;
-        ++idx;
-    }
-
-    return false;
+    return std::find(names.begin(), names.end(), name) != names.end();
 }
 
-static bool match_callsite_name(LLVMNode *callNode, const char *names[])
+static bool match_callsite_name(LLVMNode *callNode, const std::vector<std::string> &names)
 {
     using namespace llvm;
 
@@ -717,28 +710,26 @@ static bool match_callsite_name(LLVMNode *callNode, const char *names[])
     return false;
 }
 
-bool LLVMDependenceGraph::getCallSites(const char *name, std::set<LLVMNode *> *callsites)
+std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const std::string &name)
 {
-    const char *names[] = {name, NULL};
-    return getCallSites(names, callsites);
+    return getCallSites(std::vector<std::string>{name});
 }
 
-bool LLVMDependenceGraph::getCallSites(const char *names[],
-                                       std::set<LLVMNode *> *callsites)
+std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const std::vector<std::string> &names)
 {
+    std::set<LLVMNode *> callsites;
     for (auto F : constructedFunctions) {
         for (auto I : F.second->getBlocks()) {
             LLVMBBlock *BB = I.second;
             for (LLVMNode *n : BB->getNodes()) {
                 if (llvm::isa<llvm::CallInst>(n->getValue())) {
                     if (match_callsite_name(n, names))
-                        callsites->insert(n);
+                        callsites.insert(n);
                 }
             }
         }
     }
-
-    return callsites->size() != 0;
+    return callsites;
 }
 
 void LLVMDependenceGraph::computeControlExpression(bool addCDs)

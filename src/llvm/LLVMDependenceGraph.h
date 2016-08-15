@@ -84,9 +84,9 @@ public:
     // go through the graph and find all (possible) call-sites
     // for a function
     // FIXME: can implement via getCallNodes
-    bool getCallSites(const char *name, std::set<LLVMNode *> *callsites);
+    std::set<LLVMNode *> getCallSites(const std::string &name);
     // this method takes NULL-terminated array of names
-    bool getCallSites(const char *names[], std::set<LLVMNode *> *callsites);
+    std::set<LLVMNode *> getCallSites(const std::vector<std::string> &names);
 
     // FIXME we need remove the callsite from here if we slice away
     // the callsite

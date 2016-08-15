@@ -473,19 +473,17 @@ protected:
         // FIXME add command line switch -svcomp and
         // do this only with -svcomp switch
         // "sv-comp" means Competition of Software Verification
-        const char *sc[] = {
+        const std::vector<std::string> &sc = {
             slicing_criterion,
             "klee_assume",
-            nullptr // termination
         };
 
-        std::set<LLVMNode *> callsites;
         // check for slicing criterion here, because
         // we might have built new subgraphs that contain
         // it during points-to analysis
-        bool has_call_sites = d.getCallSites(sc, &callsites);
+        std::set<LLVMNode *> callsites = d.getCallSites(sc);
         bool got_slicing_criterion = true;
-        if (!has_call_sites) {
+        if (callsites.empty()) {
             if (strcmp(slicing_criterion, "ret") == 0) {
                 callsites.insert(d.getExit());
             } else {
@@ -690,16 +688,9 @@ static void print_statistics(llvm::Module *M, const char *prefix = nullptr)
            << gnum << " " << fnum << " " << bnum << " " << inum << "\n";
 }
 
-static bool array_match(llvm::StringRef name, const char *names[])
+static bool array_match(const std::string &name, const std::vector<std::string> &names)
 {
-    unsigned idx = 0;
-    while(names[idx]) {
-        if (name.equals(names[idx]))
-            return true;
-        ++idx;
-    }
-
-    return false;
+    return std::find(names.begin(), names.end(), name) != names.end();
 }
 
 static bool remove_unused_from_module(llvm::Module *M)
@@ -708,7 +699,7 @@ static bool remove_unused_from_module(llvm::Module *M)
     // do not slice away these functions no matter what
     // FIXME do it a vector and fill it dynamically according
     // to what is the setup (like for sv-comp or general..)
-    const char *keep[] = {"main", "klee_assume", nullptr};
+    const std::vector<std::string> &keep = {"main", "klee_assume"};
 
     // when erasing while iterating the slicer crashes
     // so set the to be erased values into container
