@@ -62,7 +62,7 @@ public:
 
     LLVMDG2Dot(LLVMDependenceGraph *dg,
                   uint32_t opts = debug::PRINT_CFG | debug::PRINT_DD | debug::PRINT_CD,
-                  const char *file = NULL)
+                  const char *file = nullptr)
         : debug::DG2Dot<LLVMNode>(dg, opts, file) {}
 
     /* virtual */
@@ -140,7 +140,7 @@ public:
 
     LLVMDGDumpBlocks(LLVMDependenceGraph *dg,
                   uint32_t opts = debug::PRINT_CFG | debug::PRINT_DD | debug::PRINT_CD,
-                  const char *file = NULL)
+                  const char *file = nullptr)
         : debug::DG2Dot<LLVMNode>(dg, opts, file) {}
 
     /* virtual

@@ -47,7 +47,7 @@ public:
 
     DG2Dot<NodeT>(DependenceGraph<NodeT> *dg,
                   uint32_t opts = PRINT_CFG | PRINT_DD | PRINT_CD,
-                  const char *file = NULL)
+                  const char *file = nullptr)
         : options(opts), dg(dg), file(file)
     {
         reopen(file);

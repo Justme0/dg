@@ -111,8 +111,8 @@ int main(int argc, char *argv[])
     LLVMContext context;
     SMDiagnostic SMD;
 
-    const char *source = NULL;
-    const char *module = NULL;
+    const char *source = nullptr;
+    const char *module = nullptr;
 
     if (argc < 2 || argc > 3 ) {
         errs() << "Usage: module [source_code]\n";
