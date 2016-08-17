@@ -54,6 +54,8 @@
 #include "analysis/PointsTo/PointsToFlowSensitive.h"
 #include "analysis/PointsTo/Pointer.h"
 
+#include "Defect.h"
+
 using namespace dg;
 using llvm::errs;
 
@@ -461,7 +463,7 @@ protected:
     }
 
     // shared by old and new analyses
-    bool sliceGraph(LLVMDependenceGraph &d, const char *slicing_criterion)
+    bool sliceGraph(LLVMDependenceGraph &d, const std::string &slicing_criterion)
     {
         // verify if the graph is built correctly
         // FIXME - do it optionally (command line argument)
@@ -473,18 +475,30 @@ protected:
         // FIXME add command line switch -svcomp and
         // do this only with -svcomp switch
         // "sv-comp" means Competition of Software Verification
-        const std::vector<std::string> &sc = {
-            slicing_criterion,
-            "klee_assume",
-        };
+        // const std::vector<std::string> &sc = {
+        //     slicing_criterion,
+        //     "klee_assume",
+        // };
 
         // check for slicing criterion here, because
         // we might have built new subgraphs that contain
         // it during points-to analysis
-        std::set<LLVMNode *> callsites = d.getCallSites(sc);
+        // std::set<LLVMNode *> callsites = d.getCallSites(sc);
+
+        // 2016.8.17 jiangg
+        crtr::MemoryLeak ML(M);
+        auto criterion = ML.getCriterion();
+
+        errs() << "Criterion are (size is " << criterion.size() << ")\n";
+        for (llvm::Instruction *I : criterion) {
+            I->dump();
+        }
+
+        std::set<LLVMNode *> callsites = d.getCallSites(criterion);
+
         bool got_slicing_criterion = true;
         if (callsites.empty()) {
-            if (strcmp(slicing_criterion, "ret") == 0) {
+            if (slicing_criterion == "ret") {
                 callsites.insert(d.getExit());
             } else {
                 errs() << "Did not find slicing criterion: "
