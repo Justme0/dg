@@ -24,6 +24,7 @@ namespace llvm {
 
 #include "LLVMNode.h"
 #include "DependenceGraph.h"
+#include "../../tools/Defect.h"
 
 #include "analysis/ControlExpression/ControlExpression.h"
 
@@ -85,8 +86,8 @@ public:
     // for a function
     // FIXME: can implement via getCallNodes
     std::set<LLVMNode *> getCallSites(const std::string &name);
-    // this method takes NULL-terminated array of names
     std::set<LLVMNode *> getCallSites(const std::vector<std::string> &names);
+    std::set<LLVMNode *> getCallSites(const crtr::Defect::Criterion &criterion);
 
     // FIXME we need remove the callsite from here if we slice away
     // the callsite

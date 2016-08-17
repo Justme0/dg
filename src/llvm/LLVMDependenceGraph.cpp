@@ -25,6 +25,7 @@
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/DataLayout.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include "LLVMDGVerifier.h"
@@ -698,6 +699,10 @@ static bool match_callsite_name(LLVMNode *callNode, const std::vector<std::strin
         // simply iterate over the subgraphs, get the entry node
         // and check it
         for (LLVMDependenceGraph *dg : callNode->getSubgraphs()) {
+            // 2016.08.17 comment by jiangg
+            // If callNode is a function pointer, it may have multiple subgraphs.
+            // We only test the first one. Is it sound?
+
             LLVMNode *entry = dg->getEntry();
             assert(entry && "No entry node in graph");
 
@@ -705,6 +710,7 @@ static bool match_callsite_name(LLVMNode *callNode, const std::vector<std::strin
                 = cast<Function>(entry->getValue()->stripPointerCasts());
             return array_match(func->getName(), names);
         }
+        llvm_unreachable("Call node's subgraph isn't empty, should return already!");
     }
 
     return false;
@@ -725,6 +731,22 @@ std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const std::vector<std::st
                 if (llvm::isa<llvm::CallInst>(n->getValue())) {
                     if (match_callsite_name(n, names))
                         callsites.insert(n);
+                }
+            }
+        }
+    }
+    return callsites;
+}
+
+std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const crtr::Defect::Criterion &criterion)
+{
+    std::set<LLVMNode *> callsites;
+    for (auto F : constructedFunctions) {
+        for (auto B : F.second->getBlocks()) {
+            for (LLVMNode *I : B.second->getNodes()) {
+                llvm::CallInst *CI = llvm::dyn_cast<llvm::CallInst>(I->getValue());
+                if (CI != nullptr && criterion.find(CI) != criterion.end()) {
+                    callsites.insert(I);
                 }
             }
         }
