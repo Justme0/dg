@@ -6,8 +6,9 @@ options = {}
 OptionParser.new do |opts|
   opts.banner = "Usage: #{File.basename __FILE__} options"
 
+  options[:criterion] = []
   opts.on("-c", "--criterion CRITERION", "Specify slicing criterion") do |criterion|
-    options[:criterion] = criterion
+    options[:criterion] << criterion
   end
 
   opts.on("-d", "--diff", "Show difference between original and sliced IR") do
@@ -65,7 +66,9 @@ system "llvm-dis #{ir_bc} -o #{ir_ll}" or abort
 puts "Done.\n".green
 
 puts "Slice #{ir_bc} to #{slice_bc}...".brown
-system "./llvm-slicer -o #{slice_bc} -c #{options[:criterion]} #{ir_bc}" or abort
+cmd = "./llvm-slicer -pts fs -o #{slice_bc} -c #{options[:criterion].join(" -c ")} #{ir_bc}"
+puts "Command is " + cmd.cyan
+system cmd or abort
 puts "Done.\n".green
 
 # get sliced IR
@@ -77,5 +80,6 @@ puts "IR before slicing : #{ir_ll} #{ir_bc}"
 puts "IR after slicing  : #{slice_ll} #{slice_bc}"
 
 if options[:diff]
-  system "gvimdiff #{ir_ll} #{slice_ll}" or abort
+  diff_tool = (`echo $DISPLAY` == "\n" ? "vimdiff" : "gvimdiff")
+  system "#{diff_tool} #{ir_ll} #{slice_ll}" or abort
 end
