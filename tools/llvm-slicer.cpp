@@ -37,6 +37,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <list>
 
 #include "llvm/LLVMDependenceGraph.h"
 #include "llvm/Slicer.h"
@@ -463,7 +464,8 @@ protected:
     }
 
     // shared by old and new analyses
-    bool sliceGraph(LLVMDependenceGraph &d, const std::string &slicing_criterion)
+    bool sliceGraph(LLVMDependenceGraph &d,
+                    const std::vector<std::string> &slicing_criterion)
     {
         // verify if the graph is built correctly
         // FIXME - do it optionally (command line argument)
@@ -486,23 +488,30 @@ protected:
         // std::set<LLVMNode *> callsites = d.getCallSites(sc);
 
         // 2016.8.17 jiangg
-        crtr::MemoryLeak ML(M);
-        auto criterion = ML.getCriterion();
+        std::set<LLVMNode *> callsites;
+        for (const std::string &SC: slicing_criterion) {
+            // Factory Method according to SC
+            auto defect = crtr::Defect::create(M, SC);
+            const auto &criterion = defect->getCriterion();
 
-        errs() << "Criterion are (size is " << criterion.size() << ")\n";
-        for (llvm::Instruction *I : criterion) {
-            I->dump();
+            errs().changeColor(llvm::raw_ostream::YELLOW);
+            errs() << "Criterion is (" << defect->getName() << ", size is " << criterion.size() << ")\n";
+            for (llvm::Instruction *I : criterion) {
+                I->dump();
+            }
+            errs().resetColor();
+
+            const std::set<LLVMNode *> &CS = d.getCallSites(criterion);
+            callsites.insert(CS.begin(), CS.end());
         }
-
-        std::set<LLVMNode *> callsites = d.getCallSites(criterion);
 
         bool got_slicing_criterion = true;
         if (callsites.empty()) {
-            if (slicing_criterion == "ret") {
+            if (slicing_criterion.front() == "ret") {
                 callsites.insert(d.getExit());
             } else {
                 errs() << "Did not find slicing criterion: "
-                       << slicing_criterion << "\n";
+                       << slicing_criterion.front() << "\n";
                 got_slicing_criterion = false;
             }
         }
@@ -590,7 +599,7 @@ public:
         delete RD;
     }
 
-    bool slice(const char *slicing_criterion)
+    bool slice(const std::vector<std::string> &slicing_criterion)
     {
         debug::TimeMeasure tm;
         tm.start();
@@ -648,7 +657,7 @@ public:
               uint32_t o = 0, CD_ALG cda = CLASSIC)
         :Slicer(mod, modnm, o, cda) {}
 
-    bool slice(const char *slicing_criterion)
+    bool slice(const std::vector<std::string> &slicing_criterion)
     {
         // 1. build the dependence graph
         LLVMDependenceGraph d;
@@ -865,7 +874,7 @@ int main(int argc, char *argv[])
     bool should_verify_module = true;
     bool remove_unused_only = false;
     bool statistics = false;
-    const char *slicing_criterion = nullptr;
+    std::vector<std::string> slicing_criterion;
     const char *module = nullptr;
     const char *output = nullptr;
     uint32_t opts = 0;
@@ -881,7 +890,7 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "-c") == 0
             || strcmp(argv[i], "-crit") == 0
             || strcmp(argv[i], "-slice") == 0){
-            slicing_criterion = argv[++i];
+            slicing_criterion.push_back(argv[++i]);
         } else if (strcmp(argv[i], "-debug") == 0) {
             const char *arg = argv[++i];
             if (strcmp(arg, "dd") == 0)
@@ -939,7 +948,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (!(slicing_criterion || remove_unused_only) || !module) {
+    if ((slicing_criterion.empty() && !remove_unused_only) || nullptr == module) {
         errs() << usage;
         return 1;
     }

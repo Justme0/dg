@@ -110,16 +110,16 @@ public:
 
         // 2016.08.12 jiangg
         // often crash here
-        llvm::errs() << "Debug: erase basic block "
-                     << blk->getModule()->getName() << "::"
-                     << blk->getParent()->getName() << "::"
-                     << blk->getName() << " from its parent\n";
-        blk->dump();
+        // llvm::errs() << "Debug: erase basic block "
+        //              << blk->getModule()->getName() << "::"
+        //              << blk->getParent()->getName() << "::"
+        //              << blk->getName() << " from its parent\n";
+        // blk->dump();
 
         // finally, erase the block per se
         blk->eraseFromParent();
 
-        llvm::errs() << "Remove successfully\n";
+        // llvm::errs() << "Remove successfully\n";
     }
 
     // override slice method

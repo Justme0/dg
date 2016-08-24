@@ -4,8 +4,9 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/InstVisitor.h"
-#include <unordered_set>
+#include <list>
 #include <memory>
+#include <mutex>
 
 /// namespace criterion
 namespace crtr {
@@ -14,20 +15,30 @@ namespace crtr {
 class Defect {
 public:
     /// Define slicing criterion type. Each criterion corresponds to an instruction.
-    using Criterion = std::unordered_set<llvm::Instruction *>;
+    using Criterion = std::list<llvm::Instruction *>;
 
 protected:
     /// Pointer to criterion.
-    std::shared_ptr<Criterion> _criterion;
+    Criterion _criterion;
+
+    /// Flag for computing criterion the first time.
+    mutable std::once_flag _firstFlag;
 
     /// Analyse which module.
     llvm::Module *_M = nullptr;
 
 public:
+    /// Create a concrete derived class instance according to different criterion (factory method).
+    static std::shared_ptr<Defect> create(llvm::Module *M,
+                                          const std::string &criterion);
+
     Defect(llvm::Module *M) : _M(M) {}
 
     /// Interface for client to get criterion.
     Criterion getCriterion() const;
+
+    /// Get defect's name. e.g. "memory leak".
+    virtual std::string getName() const = 0;
 
     virtual ~Defect() {}
 
@@ -40,66 +51,116 @@ class MemoryLeak : public Defect, protected llvm::InstVisitor<MemoryLeak> {
 public:
     MemoryLeak(llvm::Module *M) : Defect(M) {}
 
+    std::string getName() const override { return "memory leak"; }
+
+private:
+    void setCriterion() override { visit(_M); }
+
+    // Note: InstVisitor needs to be a friend here to call visit*.
+    friend llvm::InstVisitor<MemoryLeak>;
     void visitCallInst(llvm::CallInst &CI);
-
-private:
-    void setCriterion() override;
 };
 
-class DivideByZero : public Defect {
-public:
-    DivideByZero(llvm::Module *M);
-
-private:
-    void setCriterion() override;
-};
-
-class Dereference : public Defect {
-public:
-    Dereference(llvm::Module *M);
-
-private:
-    void setCriterion() override;
-};
-
-class BufferOverflow : public Defect {
-public:
-    BufferOverflow(llvm::Module *M);
-
-private:
-    void setCriterion() override;
-};
-
-class IntegerOverflow : public Defect {
-public:
-    IntegerOverflow(llvm::Module *M);
-
-private:
-    void setCriterion() override;
-};
-
-class FileIO : public Defect {
+class FileIO : public Defect, protected llvm::InstVisitor<FileIO> {
 public:
     FileIO(llvm::Module *M) : Defect(M) {}
 
+    std::string getName() const override { return "file IO"; }
+
 private:
-    void setCriterion() override;
+    void setCriterion() override { visit(_M); }
+
+    // Note: InstVisitor needs to be a friend here to call visit*.
+    friend llvm::InstVisitor<FileIO>;
+    void visitCallInst(llvm::CallInst &CI);
 };
 
-class UninitializedVariable : public Defect {
+class DivideByZero : public Defect, protected llvm::InstVisitor<DivideByZero> {
+public:
+    DivideByZero(llvm::Module *M) : Defect(M) {};
+
+    std::string getName() const override { return "divide by zero"; }
+
+private:
+    void setCriterion() override { visit(_M); }
+
+    // Note: InstVisitor needs to be a friend here to call visit*.
+    friend llvm::InstVisitor<DivideByZero>;
+    void visitBinaryOperator(llvm::BinaryOperator &BO);
+};
+
+class IntegerOverflow : public Defect, protected llvm::InstVisitor<IntegerOverflow> {
+public:
+    IntegerOverflow(llvm::Module *M) : Defect(M) {};
+
+    std::string getName() const override { return "integer overflow"; }
+
+private:
+    void setCriterion() override { visit(_M); }
+
+    // Note: InstVisitor needs to be a friend here to call visit*.
+    friend llvm::InstVisitor<IntegerOverflow>;
+    void visitTruncInst(llvm::TruncInst &TI);
+};
+
+class PointerDereference : public Defect, protected llvm::InstVisitor<PointerDereference> {
+public:
+    PointerDereference(llvm::Module *M) : Defect(M) {};
+
+    std::string getName() const override { return "pointer dereference"; }
+
+private:
+    void setCriterion() override { visit(_M); }
+
+    // Note: InstVisitor needs to be a friend here to call visit*.
+    friend llvm::InstVisitor<PointerDereference>;
+    void visitLoadInst(llvm::LoadInst &LI);
+    void visitStoreInst(llvm::StoreInst &SI);
+};
+
+class BufferOverflow : public Defect, protected llvm::InstVisitor<BufferOverflow> {
+public:
+    BufferOverflow(llvm::Module *M) : Defect(M) {};
+
+    std::string getName() const override { return "buffer overflow"; }
+
+private:
+    void setCriterion() override { visit(_M); }
+
+    // Note: InstVisitor needs to be a friend here to call visit*.
+    friend llvm::InstVisitor<BufferOverflow>;
+    void visitLoadInst(llvm::LoadInst &LI);
+    void visitStoreInst(llvm::StoreInst &SI);
+};
+
+class UninitializedVariable : public Defect, protected llvm::InstVisitor<UninitializedVariable> {
 public:
     UninitializedVariable(llvm::Module *M) : Defect(M) {}
 
+    std::string getName() const override { return "uninitialized variable"; }
+
 private:
-    void setCriterion() override;
+    void setCriterion() override { visit(_M); };
+
+    // Note: InstVisitor needs to be a friend here to call visit*.
+    friend llvm::InstVisitor<UninitializedVariable>;
+    void visitLoadInst(llvm::LoadInst &LI);
+    void visitStoreInst(llvm::StoreInst &SI);
 };
 
-class ReturnOfStackVariableAddress : public Defect {
+class StackAddressEscape : public Defect, protected llvm::InstVisitor<StackAddressEscape> {
 public:
-    ReturnOfStackVariableAddress(llvm::Module *M);
+    StackAddressEscape(llvm::Module *M) : Defect(M) {}
+
+    std::string getName() const override { return "return of stack variable address"; }
 
 private:
-    void setCriterion() override;
+    void setCriterion() override { visit(_M); };
+
+    // Note: InstVisitor needs to be a friend here to call visit*.
+    friend llvm::InstVisitor<StackAddressEscape>;
+    void visitStoreInst(llvm::StoreInst &SI);
+    void visitReturnInst(llvm::ReturnInst &RI);
 };
 
 } // end namespace crtr

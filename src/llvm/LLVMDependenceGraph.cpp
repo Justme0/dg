@@ -691,7 +691,7 @@ static bool match_callsite_name(LLVMNode *callNode, const std::vector<std::strin
         const Value *calledValue = callInst->getCalledValue();
         const Function *func = dyn_cast<Function>(calledValue->stripPointerCasts());
         // in the case we haven't run points-to analysis
-        if (!func)
+        if (nullptr == func)
             return false;
 
         return array_match(func->getName(), names);
@@ -712,8 +712,6 @@ static bool match_callsite_name(LLVMNode *callNode, const std::vector<std::strin
         }
         llvm_unreachable("Call node's subgraph isn't empty, should return already!");
     }
-
-    return false;
 }
 
 std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const std::string &name)
@@ -744,8 +742,7 @@ std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const crtr::Defect::Crite
     for (auto F : constructedFunctions) {
         for (auto B : F.second->getBlocks()) {
             for (LLVMNode *I : B.second->getNodes()) {
-                llvm::CallInst *CI = llvm::dyn_cast<llvm::CallInst>(I->getValue());
-                if (CI != nullptr && criterion.find(CI) != criterion.end()) {
+                if (std::find(criterion.begin(), criterion.end(), llvm::cast<llvm::Instruction>(I->getValue())) != criterion.end()) {
                     callsites.insert(I);
                 }
             }
