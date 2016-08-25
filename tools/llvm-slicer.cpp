@@ -495,7 +495,7 @@ protected:
             const auto &criterion = defect->getCriterion();
 
             errs().changeColor(llvm::raw_ostream::YELLOW);
-            errs() << "Criterion is (" << defect->getName() << ", size is " << criterion.size() << ")\n";
+            errs() << defect->getName() << " defect criterion has " << criterion.size() << ":\n";
             for (llvm::Instruction *I : criterion) {
                 I->dump();
             }
