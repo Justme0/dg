@@ -18,7 +18,7 @@ public:
     using Criterion = std::list<llvm::Instruction *>;
 
 protected:
-    /// Pointer to criterion.
+    /// Program slicing criterion.
     Criterion _criterion;
 
     /// Flag for computing criterion the first time.
