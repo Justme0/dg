@@ -100,20 +100,20 @@ void PointerDereference::visitStoreInst(StoreInst &SI) {
     }
 }
 
-/// e.g. arr[1] = 3;
+/// e.g. arr[1];
 /// %arr = alloca [3 x i32], align 4
-/// %arrayidx = getelementptr inbounds [3 x i32], [3 x i32]* %arr, i64 0, i64 1
-/// store i32 3, i32* %arrayidx, align 4
+/// %arrayidx3 = getelementptr inbounds [3 x i32], [3 x i32]* %arr, i64 0, i64 1
+/// %2 = load i32, i32* %arrayidx3, align 4
 void BufferOverflow::visitLoadInst(LoadInst &LI) {
     if(GetElementPtrInst::classof(LI.getPointerOperand())) {
         _criterion.push_back(&LI);
     }
 }
 
-/// e.g. arr[1];
+/// e.g. arr[1] = 3;
 /// %arr = alloca [3 x i32], align 4
-/// %arrayidx3 = getelementptr inbounds [3 x i32], [3 x i32]* %arr, i64 0, i64 1
-/// %2 = load i32, i32* %arrayidx3, align 4
+/// %arrayidx = getelementptr inbounds [3 x i32], [3 x i32]* %arr, i64 0, i64 1
+/// store i32 3, i32* %arrayidx, align 4
 void BufferOverflow::visitStoreInst(StoreInst &SI) {
     if (GetElementPtrInst::classof(SI.getPointerOperand())) {
         _criterion.push_back(&SI);
@@ -148,9 +148,9 @@ void UninitializedVariable::visitStoreInst(StoreInst &SI) {
 ///
 /// %a = alloca double, align 8
 /// %p = alloca double*, align 8
-/// store double* %a, double** %p, align 8, !dbg !28
-/// %0 = load double*, double** %p, align 8, !dbg !29
-/// ret double* %0, !dbg !30
+/// store double* %a, double** %p, align 8
+/// %0 = load double*, double** %p, align 8
+/// ret double* %0
 void StackAddressEscape::visitStoreInst(llvm::StoreInst &SI) {
     // Conservative analysis. If a pointer is stored, the instruction is
     // added to criterion.
