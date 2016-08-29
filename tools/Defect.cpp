@@ -48,6 +48,9 @@ void FileIO::visitCallInst(CallInst &CI) {
         "fopen",
         "freopen",
         "fclose",
+        "open",
+        "openat",
+        "creat",
     };
 
     if (std::find(candidates.begin(), candidates.end(),
