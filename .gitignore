@@ -59,7 +59,6 @@ tests/*-test
 
 # C files in tools are test codes
 tools/*.c
-tools/*.bc
 
 tools/a.*
 tools/b.*
