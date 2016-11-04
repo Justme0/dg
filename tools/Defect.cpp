@@ -103,7 +103,7 @@ void PointerDereference::visitStoreInst(StoreInst &SI) {
 /// e.g. arr[1];
 /// %arr = alloca [3 x i32], align 4
 /// %arrayidx3 = getelementptr inbounds [3 x i32], [3 x i32]* %arr, i64 0, i64 1
-/// %2 = load i32, i32* %arrayidx3, align 4
+/// %2 = load i32, i32* %arrayidx3, align 4 (LI)
 void BufferOverflow::visitLoadInst(LoadInst &LI) {
     if(GetElementPtrInst::classof(LI.getPointerOperand())) {
         _criterion.push_back(&LI);
@@ -113,7 +113,7 @@ void BufferOverflow::visitLoadInst(LoadInst &LI) {
 /// e.g. arr[1] = 3;
 /// %arr = alloca [3 x i32], align 4
 /// %arrayidx = getelementptr inbounds [3 x i32], [3 x i32]* %arr, i64 0, i64 1
-/// store i32 3, i32* %arrayidx, align 4
+/// store i32 3, i32* %arrayidx, align 4 (SI)
 void BufferOverflow::visitStoreInst(StoreInst &SI) {
     if (GetElementPtrInst::classof(SI.getPointerOperand())) {
         _criterion.push_back(&SI);
@@ -122,7 +122,7 @@ void BufferOverflow::visitStoreInst(StoreInst &SI) {
 
 /// e.g. int a; a;
 /// %a = alloca i32, align 4
-/// %0 = load i32, i32* %a, align 4
+/// %0 = load i32, i32* %a, align 4 (LI)
 void UninitializedVariable::visitLoadInst(LoadInst &LI) {
     if (AllocaInst::classof(LI.getPointerOperand())) {
         _criterion.push_back(&LI);
@@ -132,7 +132,7 @@ void UninitializedVariable::visitLoadInst(LoadInst &LI) {
 /// e.g. int a; int *p = &a;
 /// %a = alloca i32, align 4
 /// %p = alloca i32*, align 8
-/// store i32* %a, i32** %p, align 8
+/// store i32* %a, i32** %p, align 8 (SI)
 void UninitializedVariable::visitStoreInst(StoreInst &SI) {
     if (AllocaInst::classof(SI.getValueOperand())) {
         _criterion.push_back(&SI);
@@ -148,7 +148,7 @@ void UninitializedVariable::visitStoreInst(StoreInst &SI) {
 ///
 /// %a = alloca double, align 8
 /// %p = alloca double*, align 8
-/// store double* %a, double** %p, align 8
+/// store double* %a, double** %p, align 8 (SI)
 /// %0 = load double*, double** %p, align 8
 /// ret double* %0
 void StackAddressEscape::visitStoreInst(llvm::StoreInst &SI) {
