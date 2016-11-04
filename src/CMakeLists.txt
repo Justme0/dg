@@ -1,6 +1,7 @@
 if (LLVM_DG)
 
 add_library(PTA SHARED
+	analysis/SubgraphNode.h
 	analysis/Offset.h
 	analysis/PointsTo/Pointer.h
 	analysis/PointsTo/Pointer.cpp
@@ -12,6 +13,7 @@ add_library(PTA SHARED
 )
 
 add_library(RD SHARED
+	analysis/SubgraphNode.h
 	analysis/Offset.h
 	analysis/ReachingDefinitions/ReachingDefinitions.h
 	analysis/ReachingDefinitions/ReachingDefinitions.cpp
@@ -33,14 +35,16 @@ add_library(LLVMdg SHARED
 	llvm/LLVMDGVerifier.h
 	llvm/LLVMDGVerifier.cpp
 	llvm/Slicer.h
-	llvm/llvm-util.h
+	llvm/llvm-utils.h
 	# -- LLVM analysis
 	llvm/analysis/PostDominators.cpp
-	llvm/analysis/ReachingDefinitions.h
-	llvm/analysis/ReachingDefinitions.cpp
-	llvm/analysis/PointsTo.h
-	llvm/analysis/PointerSubgraph.h
-	llvm/analysis/PointerSubgraph.cpp
+	llvm/analysis/ReachingDefinitions/ReachingDefinitions.h
+	llvm/analysis/ReachingDefinitions/ReachingDefinitions.cpp
+	llvm/analysis/PointsTo/PointsTo.h
+	llvm/analysis/PointsTo/PointerSubgraph.h
+	llvm/analysis/PointsTo/PointerSubgraph.cpp
+	llvm/analysis/PointsTo/Structure.cpp
+	llvm/analysis/PointsTo/Globals.cpp
 	llvm/analysis/DefUse.h
 	llvm/analysis/DefUse.cpp
 	# -- LLVM analysis (old)

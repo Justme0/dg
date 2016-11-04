@@ -2,13 +2,14 @@
 #define _LLVM_DG_RD_H_
 
 #include <unordered_map>
+#include <memory>
 
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Constants.h>
 
 #include "analysis/ReachingDefinitions/ReachingDefinitions.h"
-#include "llvm/analysis/PointsTo.h"
+#include "llvm/analysis/PointsTo/PointsTo.h"
 
 namespace dg {
 namespace analysis {
@@ -22,7 +23,7 @@ class LLVMRDBuilder
     struct Subgraph {
         Subgraph(RDNode *r1, RDNode *r2)
             : root(r1), ret(r2) {}
-        Subgraph() {memset(this, 0, sizeof *this);}
+        Subgraph(): root(nullptr), ret(nullptr) {}
 
         RDNode *root;
         RDNode *ret;
@@ -42,11 +43,13 @@ class LLVMRDBuilder
 
     // map of all built subgraphs - the value type is a pair (root, return)
     std::unordered_map<const llvm::Value *, Subgraph> subgraphs_map;
+    // list of dummy nodes (used just to keep the track of memory,
+    // so that we can delete it later)
+    std::vector<RDNode *> dummy_nodes;
 public:
     LLVMRDBuilder(const llvm::Module *m, dg::LLVMPointerAnalysis *p)
-        : M(m), DL(new llvm::DataLayout(M->getDataLayout())), PTA(p) {}
-
-    ~LLVMRDBuilder() { delete DL; }
+        : M(m), DL(new llvm::DataLayout(m)), PTA(p) {}
+    ~LLVMRDBuilder();
 
     RDNode *build();
 
@@ -96,7 +99,7 @@ private:
     std::pair<RDNode *, RDNode *> buildGlobals();
 
     std::pair<RDNode *, RDNode *>
-    createCallToFunction(const llvm::CallInst *CInst, const llvm::Function *F);
+    createCallToFunction(const llvm::Function *F);
 
     std::pair<RDNode *, RDNode *>
     createCall(const llvm::Instruction *Inst);
@@ -107,18 +110,26 @@ private:
 
 class LLVMReachingDefinitions
 {
-    LLVMRDBuilder *builder;
-    ReachingDefinitionsAnalysis *RDA;
+    std::unique_ptr<LLVMRDBuilder> builder;
+    std::unique_ptr<ReachingDefinitionsAnalysis> RDA;
     RDNode *root;
+    bool field_insensitive;
+    uint32_t max_set_size;
 
 public:
-    LLVMReachingDefinitions(const llvm::Module *m, dg::LLVMPointerAnalysis *pta)
-        : builder(new LLVMRDBuilder(m, pta)) {}
+    LLVMReachingDefinitions(const llvm::Module *m,
+                            dg::LLVMPointerAnalysis *pta,
+                            bool field_insens = false,
+                            uint32_t max_set_sz = ~((uint32_t) 0))
+        : builder(std::unique_ptr<LLVMRDBuilder>(new LLVMRDBuilder(m, pta))),
+          field_insensitive(field_insens), max_set_size(max_set_sz) {}
 
     void run()
     {
         root = builder->build();
-        RDA = new ReachingDefinitionsAnalysis(root);
+        RDA = std::unique_ptr<ReachingDefinitionsAnalysis>(
+            new ReachingDefinitionsAnalysis(root, field_insensitive, max_set_size)
+            );
         RDA->run();
     }
 

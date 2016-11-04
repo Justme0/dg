@@ -66,7 +66,7 @@ system "llvm-dis #{ir_bc} -o #{ir_ll}" or abort
 puts "Done.\n".green
 
 puts "Slice #{ir_bc} to #{slice_bc}...".brown
-cmd = "./llvm-slicer -pts fs -o #{slice_bc} -c #{options[:criterion].join(" -c ")} #{ir_bc}"
+cmd = "./llvm-slicer -pta fs -o #{slice_bc} -c #{options[:criterion].join(" -c ")} #{ir_bc}"
 puts "Command is " + cmd.cyan
 system cmd or abort
 puts "Done.\n".green

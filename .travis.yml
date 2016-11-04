@@ -1,0 +1,34 @@
+language: cpp
+
+# use Ubuntu 14.04
+dist: trusty
+
+compiler:
+  - clang
+  - gcc
+
+addons:
+ apt:
+  sources:
+   - llvm-toolchain-precise-3.8
+   - ubuntu-toolchain-r-test
+  packages:
+   - libllvm3.8
+   - libllvm3.8-dbg
+   - llvm-3.8
+   - llvm-3.8-dev
+   - llvm-3.8-runtime
+   - gcc-4.8
+   - g++-4.8
+   - clang
+   - cmake
+
+
+before_script:
+  - mkdir build
+  - cd build
+  - cmake .. -DLLVM_DIR=/usr/local/share/llvm-3.4/cmake
+
+script:
+  - make
+  - make test

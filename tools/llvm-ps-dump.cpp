@@ -1,11 +1,19 @@
-#include <assert.h>
-#include <cstdio>
-
-#include <set>
-
 #ifndef HAVE_LLVM
 #error "This code needs LLVM enabled"
 #endif
+
+#include <set>
+#include <string>
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+
+// turn off unused-parameter warning for LLVM libraries,
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -15,12 +23,9 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Bitcode/ReaderWriter.h>
 
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <string>
+#pragma clang diagnostic pop // ignore -Wunused-parameter
 
-#include "llvm/analysis/PointsTo.h"
+#include "llvm/analysis/PointsTo/PointsTo.h"
 #include "analysis/PointsTo/PointsToFlowInsensitive.h"
 #include "analysis/PointsTo/PointsToFlowSensitive.h"
 #include "analysis/PointsTo/Pointer.h"
@@ -312,6 +317,7 @@ int main(int argc, char *argv[])
     bool todot = false;
     const char *module = nullptr;
     PTType type = FLOW_INSENSITIVE;
+    uint64_t field_senitivity = UNKNOWN_OFFSET;
 
     // parse options
     for (int i = 1; i < argc; ++i) {
@@ -319,6 +325,8 @@ int main(int argc, char *argv[])
         if (strcmp(argv[i], "-pta") == 0) {
             if (strcmp(argv[i+1], "fs") == 0)
                 type = FLOW_SENSITIVE;
+        } else if (strcmp(argv[i], "-pta-field-sensitive") == 0) {
+            field_senitivity = (uint64_t) atoll(argv[i + 1]);
         } else if (strcmp(argv[i], "-dot") == 0) {
             todot = true;
         } else if (strcmp(argv[i], "-v") == 0) {
@@ -349,7 +357,7 @@ int main(int argc, char *argv[])
 
     debug::TimeMeasure tm;
 
-    LLVMPointerAnalysis PTA(M);
+    LLVMPointerAnalysis PTA(M, field_senitivity);
 
     tm.start();
 

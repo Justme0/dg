@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstring>
 
+#include "analysis/SubgraphNode.h"
 #include "analysis/PointsTo/PointerSubgraph.h"
 #include "analysis/Offset.h"
 
@@ -43,29 +44,14 @@ enum RDNodeType {
 
 extern RDNode *UNKNOWN_MEMORY;
 
-class RDNode {
-    std::vector<RDNode *> successors;
-    std::vector<RDNode *> predecessors;
-
+class RDNode : public SubgraphNode<RDNode> {
     RDNodeType type;
 
     // marks for DFS/BFS
     unsigned int dfsid;
-
-#ifdef DEBUG_ENABLED
-    // same data as in PSNode
-    const char *name;
-#endif
-
-    void *data;
-    void *user_data;
 public:
-    RDNode(RDNodeType t = NONE)
-        : type(t), dfsid(0),
-#ifdef DEBUG_ENABLED
-          name(nullptr),
-#endif
-          data(nullptr), user_data(nullptr) {}
+
+    RDNode(RDNodeType t = NONE) : type(t), dfsid(0) {}
 
     // this is the gro of this node, so make it public
     DefSiteSetT defs;
@@ -76,39 +62,8 @@ public:
     RDMap def_map;
 
     RDNodeType getType() const { return type; }
-
-#ifdef DEBUG_ENABLED
-    const char *getName() const { return name; }
-    void setName(const char *n) { delete name; name = strdup(n); }
-#endif
-
-    const std::vector<RDNode *>& getSuccessors() const { return successors; }
-    const std::vector<RDNode *>& getPredecessors() const { return predecessors; }
-    size_t predecessorsNum() const { return predecessors.size(); }
-    size_t successorsNum() const { return successors.size(); }
-
     DefSiteSetT& getDefines() { return defs; }
     const DefSiteSetT& getDefines() const { return defs; }
-
-    void addSuccessor(RDNode *succ)
-    {
-        successors.push_back(succ);
-        succ->predecessors.push_back(this);
-    }
-
-    // get successor when we know there's only one of them
-    RDNode *getSingleSuccessor() const
-    {
-        assert(successors.size() == 1);
-        return successors.front();
-    }
-
-    // get predecessor when we know there's only one of them
-    RDNode *getSinglePredecessor() const
-    {
-        assert(predecessors.size() == 1);
-        return predecessors.front();
-    }
 
     bool defines(RDNode *target, const Offset& off = UNKNOWN_OFFSET) const
     {
@@ -169,32 +124,9 @@ public:
         return def_map.get(n, off, len, ret);
     }
 
-    // getters & setters for analysis's data in the node
-    template <typename T>
-    T* getData() { return static_cast<T *>(data); }
-    template <typename T>
-    const T* getData() const { return static_cast<T *>(data); }
-
-    template <typename T>
-    void *setData(T *newdata)
+    bool isUnknown() const
     {
-        void *old = data;
-        data = static_cast<void *>(newdata);
-        return old;
-    }
-
-    // getters & setters for user's data in the node
-    template <typename T>
-    T* getUserData() { return static_cast<T *>(user_data); }
-    template <typename T>
-    const T* getUserData() const { return static_cast<T *>(user_data); }
-
-    template <typename T>
-    void *setUserData(T *newdata)
-    {
-        void *old = user_data;
-        user_data = static_cast<void *>(newdata);
-        return old;
+        return this == UNKNOWN_MEMORY;
     }
 
 
@@ -205,11 +137,19 @@ class ReachingDefinitionsAnalysis
 {
     RDNode *root;
     unsigned int dfsnum;
+    bool field_insensitive;
+    uint32_t max_set_size;
 
 public:
-    ReachingDefinitionsAnalysis(RDNode *r): root(r), dfsnum(0)
+    ReachingDefinitionsAnalysis(RDNode *r,
+                                bool field_insens = false,
+                                uint32_t max_set_sz = ~((uint32_t)0))
+    : root(r), dfsnum(0), field_insensitive(field_insens), max_set_size(max_set_sz)
     {
         assert(r && "Root cannot be null");
+        // with max_set_size == 0 (everything is defined on unknown location)
+        // we get unsound results with vararg functions and similar weird stuff
+        assert(max_set_size > 0 && "The set size must be at least 1");
     }
 
     void getNodes(std::set<RDNode *>& cont)
@@ -235,6 +175,52 @@ public:
         }
     }
 
+    // get nodes in BFS order and store them into
+    // the container
+    std::vector<RDNode *> getNodes(RDNode *start_node = nullptr,
+                                   std::vector<RDNode *> *start_set = nullptr,
+                                   unsigned expected_num = 0)
+    {
+        assert(root && "Do not have root");
+        assert(!(start_set && start_node)
+               && "Need either starting set or starting node, not both");
+
+        ++dfsnum;
+        ADT::QueueFIFO<RDNode *> fifo;
+
+        if (start_set) {
+            for (RDNode *s : *start_set) {
+                fifo.push(s);
+                s->dfsid = dfsnum;
+            }
+        } else {
+            if (!start_node)
+                start_node = root;
+
+            fifo.push(start_node);
+            start_node->dfsid = dfsnum;
+        }
+
+        std::vector<RDNode *> cont;
+        if (expected_num != 0)
+            cont.reserve(expected_num);
+
+        while (!fifo.empty()) {
+            RDNode *cur = fifo.pop();
+            cont.push_back(cur);
+
+            for (RDNode *succ : cur->successors) {
+                if (succ->dfsid != dfsnum) {
+                    succ->dfsid = dfsnum;
+                    fifo.push(succ);
+                }
+            }
+        }
+
+        return cont;
+    }
+
+
     RDNode *getRoot() const { return root; }
     void setRoot(RDNode *r) { root = r; }
 
@@ -244,18 +230,30 @@ public:
     {
         assert(root && "Do not have root");
 
-        std::set<RDNode *> nodes;
-        getNodes(nodes);
+        std::vector<RDNode *> to_process = getNodes(root);
+        std::vector<RDNode *> changed;
 
         // do fixpoint
-        bool changed;
         do {
-            changed = false;
+            unsigned last_processed_num = to_process.size();
+            changed.clear();
 
-            for (RDNode *cur : nodes)
-                changed |= processNode(cur);
+            for (RDNode *cur : to_process) {
+                if (processNode(cur))
+                    changed.push_back(cur);
+            }
 
-        } while (changed);
+            if (!changed.empty()) {
+                to_process.clear();
+                to_process = getNodes(nullptr /* starting node */,
+                                      &changed /* starting set */,
+                                      last_processed_num /* expected num */);
+
+                // since changed was not empty,
+                // the to_process must not be empty too
+                assert(!to_process.empty());
+            }
+        } while (!changed.empty());
     }
 };
 

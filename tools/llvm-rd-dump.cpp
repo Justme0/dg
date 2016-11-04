@@ -1,11 +1,18 @@
-#include <assert.h>
-#include <cstdio>
-
-#include <set>
-
 #ifndef HAVE_LLVM
 #error "This code needs LLVM enabled"
 #endif
+
+#include <set>
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <string>
+#include <cassert>
+#include <cstdio>
+
+// turn off unused-parameter warning for LLVM libraries,
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -15,17 +22,14 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Bitcode/ReaderWriter.h>
 
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <string>
+#pragma clang diagnostic pop // ignore -Wunused-parameter
 
 #include "analysis/PointsTo/PointsToFlowInsensitive.h"
 #include "analysis/PointsTo/PointsToFlowSensitive.h"
 #include "analysis/PointsTo/Pointer.h"
 
-#include "llvm/analysis/PointsTo.h"
-#include "llvm/analysis/ReachingDefinitions.h"
+#include "llvm/analysis/PointsTo/PointsTo.h"
+#include "llvm/analysis/ReachingDefinitions/ReachingDefinitions.h"
 
 #include "Utils.h"
 
@@ -59,8 +63,10 @@ printName(RDNode *node, bool dot)
     }
 
     const char *name = nullptr;
+#if 0
 #ifdef DEBUG_ENABLED
     name = node->getName();
+#endif
 #endif
     std::string nm;
     if (!name) {
@@ -204,6 +210,10 @@ int main(int argc, char *argv[])
     llvm::SMDiagnostic SMD;
     bool todot = false;
     const char *module = nullptr;
+    uint64_t field_senitivity = UNKNOWN_OFFSET;
+    bool rd_field_insensitive = false;
+    uint32_t max_set_size = ~((uint32_t) 0);
+
     enum {
         FLOW_SENSITIVE = 1,
         FLOW_INSENSITIVE,
@@ -212,9 +222,19 @@ int main(int argc, char *argv[])
     // parse options
     for (int i = 1; i < argc; ++i) {
         // run given points-to analysis
-        if (strcmp(argv[i], "-pts") == 0) {
+        if (strcmp(argv[i], "-pta") == 0) {
             if (strcmp(argv[i+1], "fs") == 0)
                 type = FLOW_SENSITIVE;
+        } else if (strcmp(argv[i], "-pta-field-sensitive") == 0) {
+            field_senitivity = (uint64_t) atoll(argv[i + 1]);
+        } else if (strcmp(argv[i], "-rd-max-set-size") == 0) {
+            max_set_size = (uint64_t) atoll(argv[i + 1]);
+            if (max_set_size == 0) {
+                llvm::errs() << "Invalid -rd-max-set-size argument\n";
+                abort();
+            }
+        } else if (strcmp(argv[i], "-rd-field-insensitive") == 0) {
+            rd_field_insensitive = true;
         } else if (strcmp(argv[i], "-dot") == 0) {
             todot = true;
         } else if (strcmp(argv[i], "-v") == 0) {
@@ -245,7 +265,7 @@ int main(int argc, char *argv[])
 
     debug::TimeMeasure tm;
 
-    LLVMPointerAnalysis PTA(M);
+    LLVMPointerAnalysis PTA(M, field_senitivity);
 
     tm.start();
 
@@ -258,7 +278,7 @@ int main(int argc, char *argv[])
     tm.stop();
     tm.report("INFO: Points-to analysis took");
 
-    LLVMReachingDefinitions RD(M, &PTA);
+    LLVMReachingDefinitions RD(M, &PTA, rd_field_insensitive, max_set_size);
     tm.start();
     RD.run();
     tm.stop();

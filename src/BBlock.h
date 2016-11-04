@@ -165,21 +165,39 @@ public:
             }
 
             // add newly created edges to predecessor
-            for (const BBlockEdge& edge : new_edges)
+            for (const BBlockEdge& edge : new_edges) {
+                assert(edge.target != this
+                       && "Adding an edge to a block that is being isolated");
                 pred->addSuccessor(edge);
+            }
         }
 
         removeSuccessors();
 
-        // we reconnected and deleted edges from other
-        // BBs, but we still have edges from this to other BBs
         // NOTE: nextBBs were cleared in removeSuccessors()
         prevBBs.clear();
 
         // remove reverse edges to this BB
-        for (auto B : controlDeps)
-            B->revControlDeps.erase(this);
+        for (auto B : controlDeps) {
+            // we don't want to corrupt the iterator
+            // if this block is control dependent on itself.
+            // We're gonna clear it anyway
+            if (B == this)
+                continue;
 
+            B->revControlDeps.erase(this);
+        }
+
+        // clear also cd edges that blocks have
+        // to this block
+        for (auto B : revControlDeps) {
+            if (B == this)
+                continue;
+
+            B->controlDeps.erase(this);
+        }
+
+        revControlDeps.clear();
         controlDeps.clear();
     }
 
@@ -188,10 +206,12 @@ public:
         // do not leave any dangling reference
         isolate();
 
-        if (dg)
-            dg->removeBlock(key);
-
-        // XXX what to do when this is entry block?
+        if (dg) {
+            bool ret = dg->removeBlock(key);
+            assert(ret && "BUG: block was not in DG");
+            if (dg->getEntryBB() == this)
+                dg->setEntryBB(nullptr);
+        }
 
         if (with_nodes) {
             for (NodeT *n : nodes) {
@@ -249,6 +269,11 @@ public:
         nextBBs.clear();
     }
 
+    bool hasSelfLoop()
+    {
+        return nextBBs.contains(this);
+    }
+
     void removeSuccessor(const BBlockEdge& succ)
     {
         succ.target->prevBBs.erase(this);
@@ -267,10 +292,6 @@ public:
     bool addControlDependence(BBlock<NodeT> *b)
     {
         bool ret, ret2;
-
-        // do not allow self-loops
-        if (b == this)
-            return false;
 
         ret = controlDeps.insert(b);
         ret2 = b->revControlDeps.insert(this);

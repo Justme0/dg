@@ -1,6 +1,3 @@
-/// XXX add licence
-//
-
 #ifndef HAVE_LLVM
 # error "Need LLVM for LLVMDependenceGraph"
 #endif
@@ -14,6 +11,11 @@
 #include <set>
 
 #include <llvm/Config/llvm-config.h>
+
+// turn off unused-parameter warning for LLVM libraries,
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
+
 #if (LLVM_VERSION_MINOR < 5)
  #include <llvm/Support/CFG.h>
 #else
@@ -28,19 +30,53 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
+#pragma clang diagnostic pop // ignore -Wunused-parameter
+
 #include "LLVMDGVerifier.h"
 #include "LLVMDependenceGraph.h"
 #include "LLVMNode.h"
 #include "Utils.h"
 #include "llvm-debug.h"
 
-#include "llvm/analysis/PointsTo.h"
+#include "llvm/analysis/PointsTo/PointsTo.h"
 #include "llvm/analysis/ControlExpression.h"
+#include "llvm-utils.h"
 
 using llvm::errs;
 using std::make_pair;
 
 namespace dg {
+
+namespace debug {
+    // this is a wrapper for the cases when we do not have
+    // LLVM compiled with debug information, thus
+    // debugger do not know the dump() method
+    void dumpllvm(const llvm::Value *val)
+    {
+        val->dump();
+    }
+
+    // gdb I currently have has problems with inheritance...
+    void dumpllvm(const llvm::Instruction *Inst)
+    {
+        Inst->dump();
+    }
+
+    void dumpllvm(const llvm::Argument *Inst)
+    {
+        Inst->dump();
+    }
+
+    void dumpllvm(const llvm::CallInst *Inst)
+    {
+        Inst->dump();
+    }
+
+    void dumpllvm(const llvm::Function *Inst)
+    {
+        Inst->dump();
+    }
+}
 
 /// ------------------------------------------------------------------
 //  -- LLVMDependenceGraph
@@ -91,12 +127,26 @@ LLVMDependenceGraph::~LLVMDependenceGraph()
         }
     }
 
+    // delete blocks
+    for (auto& it : getBlocks())
+        delete it.second;
+
+    // delete global nodes if this is the last graph holding them
+    if (global_nodes && global_nodes.use_count() == 1) {
+        for (auto& it : *global_nodes)
+            delete it.second;
+    }
+
     // delete post-dominator tree root
     delete getPostDominatorTreeRoot();
 }
 
 static void addGlobals(llvm::Module *m, LLVMDependenceGraph *dg)
 {
+    // create a container for globals,
+    // it will be inherited to subgraphs
+    dg->allocateGlobalNodes();
+
     for (auto I = m->global_begin(), E = m->global_end(); I != E; ++I)
         dg->addGlobalNode(new LLVMNode(&*I));
 }
@@ -310,27 +360,6 @@ static bool isMemAllocationFunc(const llvm::Function *func)
     return false;
 }
 
-static bool isCallInstCompatible(const llvm::Function *func, const llvm::CallInst *CI)
-{
-    using namespace llvm;
-
-    int i = 0;
-    if (func->getReturnType() != CI->getType())
-        return false;
-
-    for (auto I = func->arg_begin(), E = func->arg_end(); I != E; ++I, ++i) {
-        if (!I->getType()->isPointerTy())
-            continue;
-        Type *CT = CI->getOperand(i)->getType();
-        Type *FT = I->getType();
-        if (CT != FT)
-            return false;
-    }
-
-    return true;
-}
-
-
 void LLVMDependenceGraph::handleInstruction(llvm::Value *val,
                                             LLVMNode *node)
 {
@@ -356,7 +385,7 @@ void LLVMDependenceGraph::handleInstruction(llvm::Value *val,
                     continue;
 
                 Function *F = ptr.target->getUserData<Function>();
-                if (F->size() == 0 || !isCallInstCompatible(F, CInst))
+                if (F->size() == 0 || !llvmutils::callIsCompatible(F, CInst))
                     // incompatible prototypes or the function
                     // is only declaration
                     continue;
@@ -449,7 +478,8 @@ LLVMBBlock *LLVMDependenceGraph::build(llvm::BasicBlock& llvmBB)
                 abort();
             }
 
-            ext = new LLVMNode(phonyRet);
+            ext = new LLVMNode(phonyRet, true /* node owns the value -
+                                                 it will delete it */);
             addNode(ext);
             setExit(ext);
 
@@ -759,7 +789,7 @@ void LLVMDependenceGraph::computeControlExpression(bool addCDs)
         llvm::Function *func = llvm::cast<llvm::Function>(F.first);
         LLVMCFA cfa = builder.build(*func);
 
-        CE = std::move(cfa.compute());
+        CE = cfa.compute();
 
         if (addCDs) {
             // compute the control scope
@@ -785,6 +815,29 @@ void LLVMDependenceGraph::computeControlExpression(bool addCDs)
                     }
                 }
             }
+        }
+    }
+}
+
+// the original algorithm from Ferrante & Ottenstein
+// works with nodes that represent instructions, therefore
+// there's no point in control dependence self-loops.
+// However, we use basic blocks and having a 'node' control
+// dependent on itself may be desired. If a block jumps
+// on itself, the decision whether we get to that block (again)
+// is made on that block - so we want to make it control dependent
+// on itself.
+void LLVMDependenceGraph::makeSelfLoopsControlDependent()
+{
+    for (auto F : getConstructedFunctions()) {
+        auto blocks = F.second->getBlocks();
+
+        for (auto it : blocks) {
+            LLVMBBlock *B = it.second;
+
+            if (B->successorsNum() > 1 && B->hasSelfLoop())
+                // add self-loop control dependence
+                B->addControlDependence(B);
         }
     }
 }

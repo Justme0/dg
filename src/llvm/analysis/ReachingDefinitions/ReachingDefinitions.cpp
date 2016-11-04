@@ -1,6 +1,11 @@
+#include <set>
 #include <cassert>
 
 #include <llvm/Config/llvm-config.h>
+
+// turn off unused-parameter warning for LLVM libraries,
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 #if (LLVM_VERSION_MINOR < 5)
  #include <llvm/Support/CFG.h>
 #else
@@ -16,12 +21,12 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Constant.h>
 #include <llvm/Support/raw_os_ostream.h>
+#pragma clang diagnostic pop // ignore -Wunused-parameter
 
 #include "analysis/PointsTo/PointerSubgraph.h"
-#include "llvm/analysis/PointerSubgraph.h"
+#include "llvm/analysis/PointsTo/PointerSubgraph.h"
+#include "llvm/llvm-utils.h"
 #include "ReachingDefinitions.h"
-
-#include <set>
 
 namespace dg {
 namespace analysis {
@@ -125,6 +130,30 @@ static int getMemAllocationFunc(const llvm::Function *func)
         return REALLOC;
 
     return NONEMEM;
+}
+
+
+LLVMRDBuilder::~LLVMRDBuilder() {
+    // delete data layout
+    delete DL;
+
+    // delete artificial nodes from subgraphs
+    for (auto& it : subgraphs_map) {
+        assert((it.second.root && it.second.ret) ||
+               (!it.second.root && !it.second.ret));
+        delete it.second.root;
+        delete it.second.ret;
+    }
+
+    // delete nodes
+    for (auto& it : nodes_map) {
+        assert(it.first && "Have a nullptr node mapping");
+        delete it.second;
+    }
+
+    // delete dummy nodes
+    for (RDNode *nd : dummy_nodes)
+        delete nd;
 }
 
 RDNode *LLVMRDBuilder::createAlloc(const llvm::Instruction *Inst, bool is_heap)
@@ -255,7 +284,8 @@ RDNode *LLVMRDBuilder::createStore(const llvm::Instruction *Inst)
     assert(pts && "Don't have the points-to information for store");
 
     if (pts->pointsTo.empty()) {
-        llvm::errs() << "ERROR: empty STORE points-to: " << *Inst << "\n";
+        //llvm::errs() << "ERROR: empty STORE points-to: " << *Inst << "\n";
+
         // this may happen on invalid reads and writes to memory,
         // like when you try for example this:
         //
@@ -387,6 +417,7 @@ LLVMRDBuilder::buildBlock(const llvm::BasicBlock& block)
     // the first node is dummy and serves as a phi from previous
     // blocks so that we can have proper mapping
     RDNode *node = new RDNode(PHI);
+    dummy_nodes.push_back(node);
     std::pair<RDNode *, RDNode *> ret(node, nullptr);
 
     for (const Instruction& Inst : block) {
@@ -471,8 +502,7 @@ static size_t blockAddSuccessors(std::map<const llvm::BasicBlock *,
 }
 
 std::pair<RDNode *, RDNode *>
-LLVMRDBuilder::createCallToFunction(const llvm::CallInst *CInst,
-                                     const llvm::Function *F)
+LLVMRDBuilder::createCallToFunction(const llvm::Function *F)
 {
     RDNode *callNode, *returnNode;
 
@@ -577,19 +607,18 @@ RDNode *LLVMRDBuilder::createUndefinedCall(const llvm::CallInst *CInst)
     for (unsigned int i = 0; i < CInst->getNumArgOperands(); ++i)
     {
         const Value *llvmOp = CInst->getArgOperand(i);
-        // we can modify only the memory passed via pointer
-        // XXX: inttoptr? We should check if we have
-        // a points-to set for the passed value instead of
-        // this type checking...
-        if (!llvmOp->getType()->isPointerTy())
-            continue;
 
         // constants cannot be redefined
         if (isa<Constant>(llvmOp))
             continue;
 
         pta::PSNode *pts = PTA->getPointsTo(llvmOp);
-        assert(pts && "No points-to information");
+        // if we do not have a pts, this is not pointer
+        // relevant instruction. We must do it this way
+        // instead of type checking, due to the inttoptr.
+        if (!pts)
+            continue;
+
         for (const pta::Pointer& ptr : pts->pointsTo) {
             if (!ptr.isValid())
                 continue;
@@ -681,28 +710,6 @@ RDNode *LLVMRDBuilder::createIntrinsicCall(const llvm::CallInst *CInst)
     return ret;
 }
 
-// FIXME: factor this out, we use it even in PoinsTo
-static bool callIsCompatible(const llvm::Function *F, const llvm::CallInst *CI)
-{
-    using namespace llvm;
-
-    // FIXME: check for return value
-    if (F->arg_size() > CI->getNumArgOperands())
-        return false;
-
-    int idx = 0;
-    for (auto A = F->arg_begin(), E = F->arg_end(); A != E; ++A, ++idx) {
-        Type *CTy = CI->getArgOperand(idx)->getType();
-        Type *ATy = A->getType();
-
-        // FIXME: we could check that the types are equal!
-        if (!CTy->canLosslesslyBitCastTo(ATy))
-            return false;
-    }
-
-    return true;
-}
-
 std::pair<RDNode *, RDNode *>
 LLVMRDBuilder::createCall(const llvm::Instruction *Inst)
 {
@@ -739,7 +746,7 @@ LLVMRDBuilder::createCall(const llvm::Instruction *Inst)
             return std::make_pair(n, n);
         } else {
             std::pair<RDNode *, RDNode *> cf
-                = createCallToFunction(CInst, func);
+                = createCallToFunction(func);
             addNode(CInst, cf.first);
             return cf;
         }
@@ -749,7 +756,7 @@ LLVMRDBuilder::createCall(const llvm::Instruction *Inst)
         assert(op && "Don't have points-to information");
         //assert(!op->pointsTo.empty() && "Don't have pointer to the func");
         if (op->pointsTo.empty()) {
-            llvm::errs() << "WARNING: calling function via pointer, but the points-to is empty\n"
+            llvm::errs() << "WARNING: a call via a function pointer, but the points-to is empty\n"
                          << *CInst << "\n";
             RDNode *n = createUndefinedCall(CInst);
             return std::make_pair(n, n);
@@ -767,15 +774,22 @@ LLVMRDBuilder::createCall(const llvm::Instruction *Inst)
                 if (!isa<Function>(ptr.target->getUserData<Value>()))
                     continue;
 
+                const Function *F = ptr.target->getUserData<Function>();
+                if (F->size() == 0) {
+                    // the function is a declaration only,
+                    // there's nothing better we can do
+                    RDNode *n = createUndefinedCall(CInst);
+                    return std::make_pair(n, n);
+                }
+
                 // FIXME: these checks are repeated here, in PSSBuilder
                 // and in LLVMDependenceGraph, we should factor them
                 // out into a function...
-                const Function *F = ptr.target->getUserData<Function>();
-                if (F->size() == 0 || !callIsCompatible(F, CInst))
+                if (!llvmutils::callIsCompatible(F, CInst))
                     continue;
 
                 std::pair<RDNode *, RDNode *> cf
-                    = createCallToFunction(CInst, F);
+                    = createCallToFunction(F);
 
                 // connect the graphs
                 if (!call_funcptr) {
@@ -797,8 +811,11 @@ LLVMRDBuilder::createCall(const llvm::Instruction *Inst)
                 const llvm::Value *valF = ptr.target->getUserData<llvm::Value>();
                 const llvm::Function *F = llvm::cast<llvm::Function>(valF);
 
-                if (F->size() != 0 && callIsCompatible(F, CInst)) {
-                    std::pair<RDNode *, RDNode *> cf = createCallToFunction(CInst, F);
+                if (F->size() == 0) {
+                    RDNode *n = createUndefinedCall(CInst);
+                    return std::make_pair(n, n);
+                } else if (llvmutils::callIsCompatible(F, CInst)) {
+                    std::pair<RDNode *, RDNode *> cf = createCallToFunction(F);
                     call_funcptr = cf.first;
                     ret_call = cf.second;
                 }
@@ -807,7 +824,9 @@ LLVMRDBuilder::createCall(const llvm::Instruction *Inst)
 
         if (!ret_call) {
             assert(!call_funcptr);
-            llvm::errs() << "ERROR: Funcptr call with no pointer compatible\n";
+            llvm::errs() << "Function pointer call with no compatible pointer: "
+                         << *CInst << "\n";
+
             RDNode *n = createUndefinedCall(CInst);
             return std::make_pair(n, n);
         }

@@ -8,6 +8,8 @@
 #include "PointerSubgraph.h"
 #include "ADT/Queue.h"
 
+#include "analysis/SCC.h"
+
 namespace dg {
 namespace analysis {
 namespace pta {
@@ -18,22 +20,36 @@ extern PSNode *UNKNOWN_MEMORY;
 
 class PointerAnalysis
 {
-    unsigned int dfsnum;
-
     // the pointer state subgraph
     PointerSubgraph *PS;
 
+    // strongly connected components of the PointerSubgraph
+    std::vector<std::vector<PSNode *> > SCCs;
+
+    // Maximal offset that we want to keep
+    // within a pointer.
+    // Default is unconstrained (UNKNOWN_OFFSET)
+    uint64_t max_offset;
+
 protected:
-    // queue used to reach the fixpoint
-    ADT::QueueFIFO<PSNode *> queue;
+    // a set of changed nodes that are going to be
+    // processed by the analysis
+    std::vector<PSNode *> to_process;
+    std::vector<PSNode *> changed;
 
     // protected constructor for child classes
-    PointerAnalysis() : dfsnum(0), PS(nullptr) {}
+    PointerAnalysis() : PS(nullptr), max_offset(UNKNOWN_OFFSET) {}
 
 public:
-    PointerAnalysis(PointerSubgraph *ps) : dfsnum(0), PS(ps)
+    PointerAnalysis(PointerSubgraph *ps,
+                    uint64_t max_off = UNKNOWN_OFFSET)
+    : PS(ps), max_offset(max_off)
     {
         assert(PS && "Need valid PointerSubgraph object");
+
+        // compute the strongly connected components
+        SCC<PSNode> scc_comp;
+        SCCs = std::move(scc_comp.compute(PS->getRoot()));
     }
 
     virtual ~PointerAnalysis() {}
@@ -55,8 +71,7 @@ public:
 
     virtual void enqueue(PSNode *n)
     {
-        // default behaviour is to queue all reachable nodes
-        PS->getNodes(queue, n);
+        changed.push_back(n);
     }
 
     /* hooks for analysis - optional */
@@ -71,71 +86,59 @@ public:
     }
 
     PointerSubgraph *getPS() const { return PS; }
-    size_t pendingInQueue() const { return queue.size(); }
+
+    void preprocessGEPs()
+    {
+        // if a node is in a loop (a scc that has more than one node),
+        // then every GEP will end up with UNKNOWN_OFFSET after some
+        // number of iterations, so we can do that right now
+        // and save iterations
+        for (auto scc : SCCs) {
+            if (scc.size() > 1) {
+                for (PSNode *n : scc) {
+                    if (n->getType() == GEP)
+                        n->setOffset(UNKNOWN_OFFSET);
+                }
+            }
+        }
+    }
 
     void run()
     {
         PSNode *root = PS->getRoot();
-        assert(root && "Do not have root");
+        assert(root && "Do not have root of PS");
 
-        // initialize the queue
-        // FIXME let the user do that
-        queue.push(root);
-        PS->getNodes(queue);
+        // do some optimizations
+        preprocessGEPs();
 
-        while (!queue.empty()) {
-            PSNode *cur = queue.pop();
-            beforeProcessed(cur);
+        // rely on C++11 move semantics
+        to_process = PS->getNodes(root);
 
-            if (processNode(cur))
-                enqueue(cur);
+        // do fixpoint
+        do {
+            unsigned last_processed_num = to_process.size();
+            changed.clear();
 
-            afterProcessed(cur);
-        }
+            for (PSNode *cur : to_process) {
+                beforeProcessed(cur);
 
-        // FIXME: There's a bug in flow-sensitive that it does
-        // not reach fixpoint in the loop above, because it reads
-        // from values that has not been processed yet (thus it has
-        // empty points-to set) - nothing is changed, so it seems
-        // that we reached fixpoint, but we didn't and we fail
-        // the assert below. This is temporary workaround -
-        // just make another iteration. Proper fix would be to
-        // fix queuing the nodes, but that will be more difficult
-        /* LET THE BUG APPEAR
-        queue.push(root);
-        PS->getNodes(queue);
+                if (processNode(cur))
+                    enqueue(cur);
 
-        while (!queue.empty()) {
-            PSNode *cur = queue.pop();
-            beforeProcessed(cur);
+                afterProcessed(cur);
+            }
 
-            if (processNode(cur))
-                enqueue(cur);
+            if (!changed.empty()) {
+                to_process.clear();
+                to_process = PS->getNodes(nullptr /* starting node */,
+                                          &changed /* starting set */,
+                                          last_processed_num /* expected num */);
 
-            afterProcessed(cur);
-        }
-        */
-
-#ifdef DEBUG_ENABLED
-        // NOTE: This works as assertion,
-        // we'd like to be sure that we have reached the fixpoint,
-        // so we'll do one more iteration and check it
-
-        queue.push(root);
-        PS->getNodes(queue);
-
-        bool changed = false;
-        while (!queue.empty()) {
-            PSNode *cur = queue.pop();
-
-            beforeProcessed(cur);
-
-            changed = processNode(cur);
-            assert(!changed && "BUG: Did not reach fixpoint");
-
-            afterProcessed(cur);
-        }
-#endif // DEBUG_ENABLED
+                // since changed was not empty,
+                // the to_process must not be empty too
+                assert(!to_process.empty());
+            }
+        } while (!changed.empty());
     }
 
     // generic error

@@ -152,6 +152,7 @@ public:
     }
 
 private:
+        /*
     void sliceCallNode(LLVMNode *callNode,
                        LLVMDependenceGraph *graph, uint32_t slice_id)
     {
@@ -161,7 +162,6 @@ private:
         (void)actualparams;
         (void)formalparams;
 
-        /*
         if (!actualparams) {
             assert(!formalparams && "Have only one of params");
             return; // no params - nothing to do
@@ -169,7 +169,6 @@ private:
 
         assert(formalparams && "Have only one of params");
         assert(formalparams->size() == actualparams->size());
-        */
 
         // FIXME slice arguments away
     }
@@ -179,6 +178,7 @@ private:
         for (LLVMDependenceGraph *subgraph : callNode->getSubgraphs())
             sliceCallNode(callNode, subgraph, slice_id);
     }
+        */
 
     static void
     adjustPhiNodes(llvm::BasicBlock *pred, llvm::BasicBlock *blk)

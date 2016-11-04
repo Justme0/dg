@@ -6,7 +6,7 @@
 #include <llvm/IR/DataLayout.h>
 
 #include "analysis/DataFlowAnalysis.h"
-#include "ReachingDefinitions.h"
+#include "ReachingDefinitions/ReachingDefinitions.h"
 
 using dg::analysis::rd::LLVMReachingDefinitions;
 
@@ -44,6 +44,10 @@ private:
                            const llvm::Value *where, /* in CFG */
                            const llvm::Value *ptrOp,
                            uint64_t size);
+    void addDataDependence(LLVMNode *node, analysis::rd::RDNode *rd);
+    void addDataDependence(LLVMNode *node, llvm::Value *val);
+
+    void addUnknownDataDependence(LLVMNode *node, PSNode *pts);
 
     void handleLoadInst(llvm::LoadInst *, LLVMNode *);
     void handleCallInst(LLVMNode *);

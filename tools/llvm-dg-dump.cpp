@@ -7,13 +7,17 @@
 #error "This code needs LLVM enabled"
 #endif
 
-#include <llvm/IR/LLVMContext.h>
+// turn off unused-parameter warning for LLVM libraries,
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 #include <llvm/IR/Module.h>
+#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Bitcode/ReaderWriter.h>
+#pragma clang diagnostic pop
 
 #include <iostream>
 #include <sstream>
@@ -30,8 +34,8 @@
 #include "llvm/analysis/old/DefUse.h"
 
 #include "llvm/analysis/DefUse.h"
-#include "llvm/analysis/PointsTo.h"
-#include "llvm/analysis/ReachingDefinitions.h"
+#include "llvm/analysis/PointsTo/PointsTo.h"
+#include "llvm/analysis/ReachingDefinitions/ReachingDefinitions.h"
 
 #include "analysis/PointsTo/PointsToFlowSensitive.h"
 #include "analysis/PointsTo/PointsToFlowInsensitive.h"

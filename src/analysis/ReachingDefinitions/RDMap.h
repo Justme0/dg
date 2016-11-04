@@ -14,7 +14,7 @@ namespace rd {
 class RDNode;
 class ReachingDefinitionsAnalysis;
 
-static bool
+inline bool
 intervalsDisjunctive(uint64_t a1, uint64_t a2,
                      uint64_t b1, uint64_t b2)
 {
@@ -23,7 +23,7 @@ intervalsDisjunctive(uint64_t a1, uint64_t a2,
     return ((a1 <= b1) ? (a2 < b1) : (b2 < a1));
 }
 
-static bool
+inline bool
 intervalsOverlap(uint64_t a1, uint64_t a2,
                  uint64_t b1, uint64_t b2)
 {
@@ -80,9 +80,10 @@ public:
         if (is_unknown)
             return false;
 
-        if (n == UNKNOWN_MEMORY)
+        if (n == UNKNOWN_MEMORY) {
             makeUnknown();
-        else
+            return true;
+        } else
             return nodes.insert(n).second;
     }
 
@@ -138,7 +139,9 @@ public:
 
     bool merge(const RDMap *o,
                DefSiteSetT *without = nullptr,
-               bool merge_unknown = false);
+               bool field_insensitive = false,
+               uint32_t max_set_size  = (~((uint32_t) 0)),
+               bool merge_unknown     = false);
     bool add(const DefSite&, RDNode *n);
     bool update(const DefSite&, RDNode *n);
     bool empty() const { return defs.empty(); }
@@ -162,39 +165,13 @@ public:
     RDNodesSet& get(const DefSite& ds){ return defs[ds]; }
     //const RDNodesSetT& get(const DefSite& ds) const { return defs[ds]; }
     RDNodesSet& operator[](const DefSite& ds) { return defs[ds]; }
+
     //RDNodesSet& get(RDNode *, const Offset&);
     // gather reaching definitions of memory [n + off, n + off + len]
     // and store them to the @ret
     size_t get(RDNode *n, const Offset& off,
-               const Offset& len, std::set<RDNode *>& ret)
-    {
-        if (off.isUnknown()) {
-            // FIXME: use getObjectRange()
-            for (auto it : defs)
-                if (it.first.target == n)
-                    ret.insert(it.second.begin(), it.second.end());
-        } else {
-            // FIXME: use getObjectRange()
-            for (auto it : defs)
-                if (it.first.target == n
-                       /* if we found a definition with UNKNOWN_OFFSET,
-                        * it is possibly a definition that we need */
-                    && (it.first.offset.isUnknown() ||
-                        /* if the length is unknown, then just check
-                         * if the starts can overlap */
-                        (len.isUnknown() && *off <= *it.first.offset) ||
-                        /* just check if the offsets + length have
-                         * some overlap */
-                        intervalsOverlap(*it.first.offset,
-                                        /* -1 because we're starting from 0 */
-                                        *it.first.offset + *it.first.len - 1,
-                                        *off, *off + *len - 1))){
-                    ret.insert(it.second.begin(), it.second.end());
-                }
-        }
-
-        return ret.size();
-    }
+               const Offset& len, std::set<RDNode *>& ret);
+    size_t get(DefSite& ds, std::set<RDNode *>& ret);
 
     const MapT& getDefs() const { return defs; }
 

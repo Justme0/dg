@@ -7,37 +7,20 @@
 
 #include "analysis/PointsTo/PointerSubgraph.h"
 #include "analysis/PointsTo/PointerAnalysis.h"
-#include "llvm/analysis/PointerSubgraph.h"
+#include "llvm/llvm-utils.h"
+#include "llvm/analysis/PointsTo/PointerSubgraph.h"
 
 namespace dg {
 
 using analysis::pta::PointerSubgraph;
 using analysis::pta::PSNode;
 using analysis::pta::LLVMPointerSubgraphBuilder;
+using analysis::pta::PSNodesSeq;
 
 template <typename PTType>
 class LLVMPointerAnalysisImpl : public PTType
 {
     LLVMPointerSubgraphBuilder *builder;
-
-    bool callIsCompatible(const llvm::Function *F, const llvm::CallInst *CI)
-    {
-        using namespace llvm;
-
-        if (F->arg_size() > CI->getNumArgOperands())
-            return false;
-
-        int idx = 0;
-        for (auto A = F->arg_begin(), E = F->arg_end(); A != E; ++A, ++idx) {
-            Type *CTy = CI->getArgOperand(idx)->getType();
-            Type *ATy = A->getType();
-
-            if (!CTy->canLosslesslyBitCastTo(ATy))
-                return false;
-        }
-
-        return true;
-    }
 
 public:
     LLVMPointerAnalysisImpl(PointerSubgraph *PS, LLVMPointerSubgraphBuilder *b)
@@ -55,7 +38,7 @@ public:
         const llvm::CallInst *CI = callsite->getUserData<llvm::CallInst>();
 
         // incompatible prototypes, skip it...
-        if (!callIsCompatible(F, CI))
+        if (!llvmutils::callIsCompatible(F, CI))
             return false;
 
         if (F->size() == 0) {
@@ -64,7 +47,8 @@ public:
             return callsite->getPairedNode()->addPointsTo(analysis::pta::PointerUnknown);
         }
 
-        std::pair<PSNode *, PSNode *> cf = builder->createCallToFunction(CI, F);
+        // create new instructions
+        std::pair<PSNode *, PSNode *> cf = builder->createFuncptrCall(CI, F);
         assert(cf.first && cf.second);
 
         // we got the return site for the call stored as the paired node
@@ -121,15 +105,16 @@ public:
 
 class LLVMPointerAnalysis
 {
-    const llvm::Module *M;
+    //const llvm::Module *M;
     PointerSubgraph *PS;
     LLVMPointerSubgraphBuilder *builder;
 
 public:
 
-    LLVMPointerAnalysis(const llvm::Module *m)
-        : M(m), PS(new PointerSubgraph()),
-          builder(new LLVMPointerSubgraphBuilder(m)) {}
+    LLVMPointerAnalysis(const llvm::Module *m,
+                        uint64_t field_sensitivity = UNKNOWN_OFFSET)
+        : /*M(m),*/ PS(new PointerSubgraph()),
+          builder(new LLVMPointerSubgraphBuilder(m, field_sensitivity)) {}
 
     ~LLVMPointerAnalysis()
     {
@@ -147,7 +132,7 @@ public:
         return builder->getPointsTo(val);
     }
 
-    const std::unordered_map<const llvm::Value *, PSNode *>&
+    const std::unordered_map<const llvm::Value *, PSNodesSeq>&
     getNodesMap() const
     {
         return builder->getNodesMap();
