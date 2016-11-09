@@ -32,6 +32,8 @@
 *CMake*
 *Makefile*
 
+*ninja*
+
 # swp files
 *.swp
 *.swo
