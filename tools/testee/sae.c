@@ -1,31 +1,28 @@
 #include <stdio.h>
 
-int * a() {
-    int a[33] = {3, 2};
-
-    return a + 3;
+int *local() {
+  int a[33] = {3, 2};
+  return a;
 }
 
-double * b() {
-    double a;
-    double *p = &a;
-
-    return p;
+int *g_p;
+void global() {
+  int a = 2;
+  g_p = &a;
 }
 
-int *gp;
-
-void c() {
-    int **q = &gp;
-    int val;
-    *q = &val;
+void argument(int **pp) {
+  int a = 3;
+  *pp = &a;
 }
-
 
 int main() {
-    a();
-    b();
-    c();
+  local();
 
-    return 0;
+  global();
+
+  int **pp = NULL;
+  argument(pp);
+
+  return 0;
 }

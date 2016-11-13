@@ -1,15 +1,25 @@
-#include <assert.h>
-#include <cstdio>
-
-#include <set>
-
 #ifndef HAVE_LLVM
 #error "This code needs LLVM enabled"
 #endif
 
-// turn off unused-parameter warning for LLVM libraries,
+#include <set>
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <string>
+
+#include <cassert>
+#include <cstdio>
+
+// ignore unused parameters in LLVM libraries
+#if (__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
+
 #include <llvm/IR/Module.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Instructions.h>
@@ -17,17 +27,17 @@
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Bitcode/ReaderWriter.h>
-#pragma clang diagnostic pop
 
-#include <iostream>
-#include <sstream>
-#include <fstream>
-#include <string>
+#if (__clang__)
+#pragma clang diagnostic pop // ignore -Wunused-parameter
+#else
+#pragma GCC diagnostic pop
+#endif
 
 #include "llvm/LLVMDependenceGraph.h"
 #include "llvm/Slicer.h"
 #include "llvm/LLVMDG2Dot.h"
-#include "Utils.h"
+#include "TimeMeasure.h"
 
 #include "llvm/analysis/old/PointsTo.h"
 #include "llvm/analysis/old/ReachingDefs.h"
@@ -122,9 +132,8 @@ int main(int argc, char *argv[])
 
     debug::TimeMeasure tm;
 
-    LLVMDependenceGraph d;
     // TODO refactor the code...
-
+    LLVMDependenceGraph d;
     LLVMPointerAnalysis *PTA = new LLVMPointerAnalysis(M);
     if (strcmp(pts, "old")) {
         // new analyses

@@ -140,17 +140,27 @@ void UninitializedVariable::visitStoreInst(StoreInst &SI) {
 }
 
 /// e.g.
-/// double *foo() {
-///   double a;
-///   double *p = &a;
-///   return p;
+/// int *g_p;
+/// void global() {
+///   int a = 2;
+///   g_p = &a;
 /// }
+/// %a = alloca i32, align 4
+/// store i32 2, i32* %a, align 4
+/// store i32* %a, i32** @g_p, align 8 (SI)
+/// ret void
 ///
-/// %a = alloca double, align 8
-/// %p = alloca double*, align 8
-/// store double* %a, double** %p, align 8 (SI)
-/// %0 = load double*, double** %p, align 8
-/// ret double* %0
+/// void argument(int **pp) {
+///   int a = 3;
+///   *pp = &a;
+/// }
+/// %pp.addr = alloca i32**, align 8
+/// %a = alloca i32, align 4
+/// store i32** %pp, i32*** %pp.addr, align 8
+/// store i32 3, i32* %a, align 4
+/// %0 = load i32**, i32*** %pp.addr, align 8
+/// store i32* %a, i32** %0, align 8 (SI)
+/// ret void
 void StackAddressEscape::visitStoreInst(llvm::StoreInst &SI) {
     // Conservative analysis. If a pointer is stored, the instruction is
     // added to criterion.
@@ -159,6 +169,22 @@ void StackAddressEscape::visitStoreInst(llvm::StoreInst &SI) {
     }
 }
 
+/// e.g.
+/// int *local() {
+///   int a[33] = {3, 2};
+///   return a;
+/// }
+///
+/// %a = alloca [33 x i32], align 16
+/// %0 = bitcast [33 x i32]* %a to i8*
+/// call void @llvm.memset.p0i8.i64(i8* %0, i8 0, i64 132, i32 16, i1 false)
+/// %1 = bitcast i8* %0 to [33 x i32]*
+/// %2 = getelementptr [33 x i32], [33 x i32]* %1, i32 0, i32 0
+/// store i32 3, i32* %2
+/// %3 = getelementptr [33 x i32], [33 x i32]* %1, i32 0, i32 1
+/// store i32 2, i32* %3
+/// %arraydecay = getelementptr inbounds [33 x i32], [33 x i32]* %a, i32 0, i32 0
+/// ret i32* %arraydecay (RI)
 void StackAddressEscape::visitReturnInst(llvm::ReturnInst &RI) {
     Value *Ret = RI.getReturnValue();
     if (Ret == nullptr) {

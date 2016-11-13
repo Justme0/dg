@@ -1,15 +1,24 @@
 #include <cstdio>
 #include <cstdarg>
 
-// turn off unused-parameter warning for LLVM libraries,
+// ignore unused parameters in LLVM libraries
+#if (__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
 
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Function.h>
 #include <llvm/Support/raw_ostream.h>
 
+#if (__clang__)
 #pragma clang diagnostic pop // ignore -Wunused-parameter
+#else
+#pragma GCC diagnostic pop
+#endif
 
 #include "LLVMDependenceGraph.h"
 #include "LLVMNode.h"
@@ -37,7 +46,7 @@ bool LLVMDGVerifier::verify()
 
     extern std::map<llvm::Value *,
                     LLVMDependenceGraph *> constructedFunctions;
-    for (auto it : constructedFunctions)
+    for (auto& it : constructedFunctions)
         checkGraph(llvm::cast<llvm::Function>(it.first), it.second);
 
     fflush(stderr);
@@ -52,7 +61,7 @@ void LLVMDGVerifier::checkMainProc()
     // all the subgraphs must have the same global nodes
     extern std::map<llvm::Value *,
                     LLVMDependenceGraph *> constructedFunctions;
-    for (auto it : constructedFunctions) {
+    for (auto& it : constructedFunctions) {
         if (it.second->global_nodes != dg->global_nodes)
             fault("subgraph has different global nodes than main proc");
     }

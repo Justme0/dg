@@ -1,11 +1,20 @@
-// turn off unused-parameter warning for LLVM libraries,
+// ignore unused parameters in LLVM libraries
+#if (__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
 
 #include <llvm/IR/Function.h>
 #include <llvm/Analysis/PostDominators.h>
 
+#if (__clang__)
 #pragma clang diagnostic pop // ignore -Wunused-parameter
+#else
+#pragma GCC diagnostic pop
+#endif
 
 #include "analysis/BFS.h"
 #include "analysis/PostDominanceFrontiers.h"
@@ -18,7 +27,7 @@ void LLVMDependenceGraph::computePostDominators(bool addPostDomFrontiers)
 {
     using namespace llvm;
     // iterate over all functions
-    for (auto F : getConstructedFunctions()) {
+    for (auto& F : getConstructedFunctions()) {
         analysis::PostDominanceFrontiers<LLVMNode> pdfrontiers;
 
         // root of post-dominator tree
@@ -37,9 +46,9 @@ void LLVMDependenceGraph::computePostDominators(bool addPostDomFrontiers)
 #endif
 
         // add immediate post-dominator edges
-        auto our_blocks = F.second->getBlocks();
+        auto& our_blocks = F.second->getBlocks();
         bool built = false;
-        for (auto it : our_blocks) {
+        for (auto& it : our_blocks) {
             LLVMBBlock *BB = it.second;
             BasicBlock *B = cast<BasicBlock>(const_cast<Value *>(it.first));
             DomTreeNode *N = pdtree->getNode(B);
@@ -79,7 +88,7 @@ void LLVMDependenceGraph::computePostDominators(bool addPostDomFrontiers)
         // that has no pdtree. Until we have anything better, just add sound control
         // edges that are not so precise - to predecessors.
         if (!built && addPostDomFrontiers) {
-            for (auto it : our_blocks) {
+            for (auto& it : our_blocks) {
                 LLVMBBlock *BB = it.second;
                 for (const LLVMBBlock::BBlockEdge& succ : BB->successors()) {
                     // in this case we add only the control dependencies,

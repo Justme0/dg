@@ -10,11 +10,16 @@
 #include <unordered_map>
 #include <set>
 
-#include <llvm/Config/llvm-config.h>
-
-// turn off unused-parameter warning for LLVM libraries,
+// ignore unused parameters in LLVM libraries
+#if (__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
+
+#include <llvm/Config/llvm-config.h>
 
 #if (LLVM_VERSION_MINOR < 5)
  #include <llvm/Support/CFG.h>
@@ -30,13 +35,15 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
+#if (__clang__)
 #pragma clang diagnostic pop // ignore -Wunused-parameter
+#else
+#pragma GCC diagnostic pop
+#endif
 
 #include "LLVMDGVerifier.h"
 #include "LLVMDependenceGraph.h"
 #include "LLVMNode.h"
-#include "Utils.h"
-#include "llvm-debug.h"
 
 #include "llvm/analysis/PointsTo/PointsTo.h"
 #include "llvm/analysis/ControlExpression.h"
@@ -46,37 +53,6 @@ using llvm::errs;
 using std::make_pair;
 
 namespace dg {
-
-namespace debug {
-    // this is a wrapper for the cases when we do not have
-    // LLVM compiled with debug information, thus
-    // debugger do not know the dump() method
-    void dumpllvm(const llvm::Value *val)
-    {
-        val->dump();
-    }
-
-    // gdb I currently have has problems with inheritance...
-    void dumpllvm(const llvm::Instruction *Inst)
-    {
-        Inst->dump();
-    }
-
-    void dumpllvm(const llvm::Argument *Inst)
-    {
-        Inst->dump();
-    }
-
-    void dumpllvm(const llvm::CallInst *Inst)
-    {
-        Inst->dump();
-    }
-
-    void dumpllvm(const llvm::Function *Inst)
-    {
-        Inst->dump();
-    }
-}
 
 /// ------------------------------------------------------------------
 //  -- LLVMDependenceGraph
@@ -98,7 +74,7 @@ LLVMDependenceGraph::~LLVMDependenceGraph()
         LLVMNode *node = I->second;
 
         if (node) {
-            for (auto subgraph : node->getSubgraphs()) {
+            for (LLVMDependenceGraph *subgraph : node->getSubgraphs()) {
                 // graphs are referenced, once the refcount is 0
                 // the graph will be deleted
                 // Because of recursive calls, graph can be its
@@ -109,7 +85,7 @@ LLVMDependenceGraph::~LLVMDependenceGraph()
 
             LLVMDGParameters *params = node->getParameters();
             if (params) {
-                for (auto par : *params) {
+                for (const auto& par : *params) {
                     delete par.second.in;
                     delete par.second.out;
                 }
@@ -119,11 +95,11 @@ LLVMDependenceGraph::~LLVMDependenceGraph()
 
             if (!node->getBBlock()
                 && !llvm::isa<llvm::Function>(*I->first))
-                DBG("WARN: Value " << *I->first << "had no BB assigned");
+                llvmutils::printerr("Had no BB assigned", I->first);
 
             delete node;
         } else {
-            DBG("WARN: Value " << *I->first << "had no node assigned");
+            llvmutils::printerr("Had no node assigned", I->first);
         }
     }
 
@@ -228,7 +204,7 @@ static bool addSubgraphGlobParams(LLVMDependenceGraph *parentdg,
         changed |= parentdg->addFormalGlobal(it->first);
 
     // and add heap-allocated variables
-    for (auto it : *params) {
+    for (const auto& it : *params) {
         if (llvm::isa<llvm::CallInst>(it.first))
             changed |= parentdg->addFormalParameter(it.first);
     }
@@ -524,7 +500,7 @@ addControlDepsToPHI(LLVMDependenceGraph *graph,
     using namespace llvm;
 
     const BasicBlock *this_block = phi->getParent();
-    auto CB = graph->getBlocks();
+    auto& CB = graph->getBlocks();
 
     for (auto I = phi->block_begin(), E = phi->block_end(); I != E; ++I) {
         BasicBlock *B = *I;
@@ -580,20 +556,20 @@ bool LLVMDependenceGraph::build(llvm::Function *func)
     if (func->size() == 0)
         return false;
 
+    constructedFunctions.insert(make_pair(func, this));
+
     // create entry node
     LLVMNode *entry = new LLVMNode(func);
     addGlobalNode(entry);
     // we want the entry node to have this DG set
     entry->setDG(this);
     setEntry(entry);
-    BBlocksMapT& blocks = getBlocks();
-
-    constructedFunctions.insert(make_pair(func, this));
 
     // add formal parameters to this graph
     addFormalParameters();
 
     // iterate over basic blocks
+    BBlocksMapT& blocks = getBlocks();
     for (llvm::BasicBlock& llvmBB : *func) {
         LLVMBBlock *BB = build(llvmBB);
         blocks[&llvmBB] = BB;
@@ -603,8 +579,11 @@ bool LLVMDependenceGraph::build(llvm::Function *func)
             setEntryBB(BB);
     }
 
+    assert(blocks.size() == func->size()
+            && "Did not created all blocks");
+
     // add CFG edges
-    for (auto it : blocks) {
+    for (auto& it : blocks) {
         BasicBlock *llvmBB = cast<BasicBlock>(it.first);
         LLVMBBlock *BB = it.second;
         BB->setDG(this);
@@ -675,8 +654,7 @@ void LLVMDependenceGraph::addFormalParameters()
     }
 
     LLVMNode *in, *out;
-    for (auto I = func->arg_begin(), E = func->arg_end();
-         I != E; ++I) {
+    for (auto I = func->arg_begin(), E = func->arg_end(); I != E; ++I) {
         Value *val = (&*I);
 
         in = new LLVMNode(val);
@@ -752,8 +730,8 @@ std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const std::string &name)
 std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const std::vector<std::string> &names)
 {
     std::set<LLVMNode *> callsites;
-    for (auto F : constructedFunctions) {
-        for (auto I : F.second->getBlocks()) {
+    for (auto& F : constructedFunctions) {
+        for (auto& I : F.second->getBlocks()) {
             LLVMBBlock *BB = I.second;
             for (LLVMNode *n : BB->getNodes()) {
                 if (llvm::isa<llvm::CallInst>(n->getValue())) {
@@ -785,7 +763,7 @@ void LLVMDependenceGraph::computeControlExpression(bool addCDs)
 {
     LLVMCFABuilder builder;
 
-    for (auto F : getConstructedFunctions()) {
+    for (auto& F : getConstructedFunctions()) {
         llvm::Function *func = llvm::cast<llvm::Function>(F.first);
         LLVMCFA cfa = builder.build(*func);
 
@@ -794,7 +772,7 @@ void LLVMDependenceGraph::computeControlExpression(bool addCDs)
         if (addCDs) {
             // compute the control scope
             CE.computeSets();
-            auto our_blocks = F.second->getBlocks();
+            auto& our_blocks = F.second->getBlocks();
 
             for (llvm::BasicBlock& B : *func) {
                 LLVMBBlock *B1 = our_blocks[&B];
@@ -829,10 +807,10 @@ void LLVMDependenceGraph::computeControlExpression(bool addCDs)
 // on itself.
 void LLVMDependenceGraph::makeSelfLoopsControlDependent()
 {
-    for (auto F : getConstructedFunctions()) {
-        auto blocks = F.second->getBlocks();
+    for (auto& F : getConstructedFunctions()) {
+        auto& blocks = F.second->getBlocks();
 
-        for (auto it : blocks) {
+        for (auto& it : blocks) {
             LLVMBBlock *B = it.second;
 
             if (B->successorsNum() > 1 && B->hasSelfLoop())

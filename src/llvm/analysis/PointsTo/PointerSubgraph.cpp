@@ -1,11 +1,16 @@
 #include <cassert>
 #include <set>
 
-#include <llvm/Config/llvm-config.h>
-
-// turn off unused-parameter warning for LLVM libraries,
+// ignore unused parameters in LLVM libraries
+#if (__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
+#else
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
+
+#include <llvm/Config/llvm-config.h>
 
 #if (LLVM_VERSION_MINOR < 5)
  #include <llvm/Support/CFG.h>
@@ -22,7 +27,12 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Constant.h>
 #include <llvm/Support/raw_os_ostream.h>
+
+#if (__clang__)
 #pragma clang diagnostic pop // ignore -Wunused-parameter
+#else
+#pragma GCC diagnostic pop
+#endif
 
 #include "analysis/PointsTo/PointerSubgraph.h"
 #include "PointerSubgraph.h"
@@ -441,7 +451,7 @@ PSNode *LLVMPointerSubgraphBuilder::buildNode(const llvm::Value *val)
         = llvm::dyn_cast<llvm::Instruction>(val);
 
     if (Inst) {
-            auto seq = buildInstruction(*Inst);
+            PSNodesSeq seq = buildInstruction(*Inst);
             assert(seq.first && seq.second);
             return seq.second;
     } else if (const llvm::Argument *A
@@ -647,7 +657,7 @@ LLVMPointerSubgraphBuilder::createFuncptrCall(const llvm::CallInst *CInst,
     if (!subg.root)
         add_structure = true;
 
-    auto ret = createCallToFunction(F);
+    PSNodesSeq ret = createCallToFunction(F);
 
     // we took a reference
     assert(subg.root);
@@ -696,14 +706,14 @@ LLVMPointerSubgraphBuilder::createUnknownCall(const llvm::CallInst *CInst)
 PSNode *LLVMPointerSubgraphBuilder::createMemTransfer(const llvm::IntrinsicInst *I)
 {
     using namespace llvm;
-    const Value *dest, *src, *lenVal;
+    const Value *dest, *src;//, *lenVal;
 
     switch (I->getIntrinsicID()) {
         case Intrinsic::memmove:
         case Intrinsic::memcpy:
             dest = I->getOperand(0);
             src = I->getOperand(1);
-            lenVal = I->getOperand(2);
+            //lenVal = I->getOperand(2);
             break;
         default:
             errs() << "ERR: unhandled mem transfer intrinsic" << *I << "\n";
@@ -1578,7 +1588,7 @@ void LLVMPointerSubgraphBuilder::buildPointerSubgraphBlock(const llvm::BasicBloc
         if (nodes_map.count(&Inst) != 0)
             continue;
 
-        auto seq = buildInstruction(Inst);
+        PSNodesSeq seq = buildInstruction(Inst);
         assert(seq.first && seq.second
                && "Didn't created the instruction properly");
     }
@@ -1620,7 +1630,7 @@ PSNode *LLVMPointerSubgraphBuilder::buildFunction(const llvm::Function& F)
 void LLVMPointerSubgraphBuilder::addProgramStructure()
 {
     // form intraprocedural program structure (CFG edges)
-    for (auto it : subgraphs_map) {
+    for (auto& it : subgraphs_map) {
         const llvm::Function *F = it.first;
         Subgraph& subg = it.second;
 
