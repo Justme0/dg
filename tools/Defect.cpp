@@ -18,7 +18,7 @@ std::shared_ptr<Defect> Defect::create(Module *M,
     if (criterion == "uv") { return std::make_shared<UninitializedVariable>(M); }
     if (criterion == "sae") { return std::make_shared<StackAddressEscape>(M); }
 
-    throw std::invalid_argument("\"" + criterion + "\" is invalid slicing criterion!");
+    throw std::invalid_argument("\"" + criterion + "\" is an invalid slicing criterion!");
 }
 
 Defect::Criterion Defect::getCriterion() const {
