@@ -747,8 +747,8 @@ std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const std::vector<std::st
 std::set<LLVMNode *> LLVMDependenceGraph::getCallSites(const crtr::Defect::Criterion &criterion)
 {
     std::set<LLVMNode *> callsites;
-    for (auto F : constructedFunctions) {
-        for (auto B : F.second->getBlocks()) {
+    for (const auto &F : constructedFunctions) {
+        for (const auto &B : F.second->getBlocks()) {
             for (LLVMNode *I : B.second->getNodes()) {
                 if (std::find(criterion.begin(), criterion.end(), llvm::cast<llvm::Instruction>(I->getValue())) != criterion.end()) {
                     callsites.insert(I);

@@ -550,6 +550,7 @@ public:
 
         // 2016.8.17 jiangg create defect criterion
         // 2016.11.12 jiangg merge upstream/master
+        // TODO: Should the elements be const?
         std::set<LLVMNode *> callsites;
 
         // TODO: Support multiple criterions.
@@ -562,7 +563,7 @@ public:
 
         errs().changeColor(llvm::raw_ostream::YELLOW);
         errs() << defect->getName() << " defect criterions are:\n";
-        for (llvm::Instruction *I : criterion) {
+        for (const llvm::Instruction *I : criterion) {
             I->dump();
         }
         errs().resetColor();

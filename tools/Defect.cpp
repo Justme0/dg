@@ -28,7 +28,7 @@ Defect::Criterion Defect::getCriterion() const {
     return _criterion;
 }
 
-void MemoryLeak::visitCallInst(CallInst &CI) {
+void MemoryLeak::visitCallInst(const CallInst &CI) {
     static const std::vector<std::string> candidates = {
         "malloc",
         "realloc",
@@ -43,7 +43,7 @@ void MemoryLeak::visitCallInst(CallInst &CI) {
     }
 }
 
-void FileIO::visitCallInst(CallInst &CI) {
+void FileIO::visitCallInst(const CallInst &CI) {
     static const std::vector<std::string> candidates = {
         "fopen",
         "freopen",
@@ -60,7 +60,7 @@ void FileIO::visitCallInst(CallInst &CI) {
     }
 }
 
-void DivideByZero::visitBinaryOperator(BinaryOperator &BO) {
+void DivideByZero::visitBinaryOperator(const BinaryOperator &BO) {
     static const std::vector<Instruction::BinaryOps> candidates = {
         Instruction::UDiv,
         Instruction::SDiv,
@@ -76,7 +76,7 @@ void DivideByZero::visitBinaryOperator(BinaryOperator &BO) {
     }
 }
 
-void IntegerOverflow::visitTruncInst(TruncInst &TI) {
+void IntegerOverflow::visitTruncInst(const TruncInst &TI) {
     _criterion.push_back(&TI);
 }
 
@@ -84,7 +84,7 @@ void IntegerOverflow::visitTruncInst(TruncInst &TI) {
 /// %p = alloca i32*, align 8
 /// %1 = load i32*, i32** %p, align 8
 /// %2 = load i32, i32* %1, align 4 (LI)
-void PointerDereference::visitLoadInst(LoadInst &LI) {
+void PointerDereference::visitLoadInst(const LoadInst &LI) {
     if (LoadInst::classof(LI.getPointerOperand())) {
         _criterion.push_back(&LI);
     }
@@ -94,7 +94,7 @@ void PointerDereference::visitLoadInst(LoadInst &LI) {
 /// %p = alloca i32*, align 8
 /// %1 = load i32*, i32** %p, align 8
 /// store i32 2, i32* %1, align 4 (SI)
-void PointerDereference::visitStoreInst(StoreInst &SI) {
+void PointerDereference::visitStoreInst(const StoreInst &SI) {
     if (LoadInst::classof(SI.getPointerOperand())) {
         _criterion.push_back(&SI);
     }
@@ -104,7 +104,7 @@ void PointerDereference::visitStoreInst(StoreInst &SI) {
 /// %arr = alloca [3 x i32], align 4
 /// %arrayidx3 = getelementptr inbounds [3 x i32], [3 x i32]* %arr, i64 0, i64 1
 /// %2 = load i32, i32* %arrayidx3, align 4 (LI)
-void BufferOverflow::visitLoadInst(LoadInst &LI) {
+void BufferOverflow::visitLoadInst(const LoadInst &LI) {
     if(GetElementPtrInst::classof(LI.getPointerOperand())) {
         _criterion.push_back(&LI);
     }
@@ -114,7 +114,7 @@ void BufferOverflow::visitLoadInst(LoadInst &LI) {
 /// %arr = alloca [3 x i32], align 4
 /// %arrayidx = getelementptr inbounds [3 x i32], [3 x i32]* %arr, i64 0, i64 1
 /// store i32 3, i32* %arrayidx, align 4 (SI)
-void BufferOverflow::visitStoreInst(StoreInst &SI) {
+void BufferOverflow::visitStoreInst(const StoreInst &SI) {
     if (GetElementPtrInst::classof(SI.getPointerOperand())) {
         _criterion.push_back(&SI);
     }
@@ -123,7 +123,7 @@ void BufferOverflow::visitStoreInst(StoreInst &SI) {
 /// e.g. int a; a;
 /// %a = alloca i32, align 4
 /// %0 = load i32, i32* %a, align 4 (LI)
-void UninitializedVariable::visitLoadInst(LoadInst &LI) {
+void UninitializedVariable::visitLoadInst(const LoadInst &LI) {
     if (AllocaInst::classof(LI.getPointerOperand())) {
         _criterion.push_back(&LI);
     }
@@ -133,7 +133,7 @@ void UninitializedVariable::visitLoadInst(LoadInst &LI) {
 /// %a = alloca i32, align 4
 /// %p = alloca i32*, align 8
 /// store i32* %a, i32** %p, align 8 (SI)
-void UninitializedVariable::visitStoreInst(StoreInst &SI) {
+void UninitializedVariable::visitStoreInst(const StoreInst &SI) {
     if (AllocaInst::classof(SI.getValueOperand())) {
         _criterion.push_back(&SI);
     }
@@ -161,7 +161,7 @@ void UninitializedVariable::visitStoreInst(StoreInst &SI) {
 /// %0 = load i32**, i32*** %pp.addr, align 8
 /// store i32* %a, i32** %0, align 8 (SI)
 /// ret void
-void StackAddressEscape::visitStoreInst(llvm::StoreInst &SI) {
+void StackAddressEscape::visitStoreInst(const llvm::StoreInst &SI) {
     // Conservative analysis. If a pointer is stored, the instruction is
     // added to criterion.
     if (SI.getValueOperand()->getType()->isPointerTy()) {
@@ -185,7 +185,7 @@ void StackAddressEscape::visitStoreInst(llvm::StoreInst &SI) {
 /// store i32 2, i32* %3
 /// %arraydecay = getelementptr inbounds [33 x i32], [33 x i32]* %a, i32 0, i32 0
 /// ret i32* %arraydecay (RI)
-void StackAddressEscape::visitReturnInst(llvm::ReturnInst &RI) {
+void StackAddressEscape::visitReturnInst(const llvm::ReturnInst &RI) {
     Value *Ret = RI.getReturnValue();
     if (Ret == nullptr) {
         assert(RI.getFunction()->getReturnType()->isVoidTy());

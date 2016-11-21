@@ -15,7 +15,7 @@ namespace crtr {
 class Defect {
 public:
     /// Define slicing criterion type. Each criterion corresponds to an instruction.
-    using Criterion = std::list<llvm::Instruction *>;
+    using Criterion = std::list<const llvm::Instruction *>;
 
 protected:
     /// Program slicing criterion.
@@ -58,7 +58,7 @@ private:
 
     // Note: InstVisitor needs to be a friend here to call visit*.
     friend llvm::InstVisitor<MemoryLeak>;
-    void visitCallInst(llvm::CallInst &CI);
+    void visitCallInst(const llvm::CallInst &CI);
 };
 
 class FileIO : public Defect, protected llvm::InstVisitor<FileIO> {
@@ -72,7 +72,7 @@ private:
 
     // Note: InstVisitor needs to be a friend here to call visit*.
     friend llvm::InstVisitor<FileIO>;
-    void visitCallInst(llvm::CallInst &CI);
+    void visitCallInst(const llvm::CallInst &CI);
 };
 
 class DivideByZero : public Defect, protected llvm::InstVisitor<DivideByZero> {
@@ -86,7 +86,7 @@ private:
 
     // Note: InstVisitor needs to be a friend here to call visit*.
     friend llvm::InstVisitor<DivideByZero>;
-    void visitBinaryOperator(llvm::BinaryOperator &BO);
+    void visitBinaryOperator(const llvm::BinaryOperator &BO);
 };
 
 class IntegerOverflow : public Defect, protected llvm::InstVisitor<IntegerOverflow> {
@@ -100,7 +100,7 @@ private:
 
     // Note: InstVisitor needs to be a friend here to call visit*.
     friend llvm::InstVisitor<IntegerOverflow>;
-    void visitTruncInst(llvm::TruncInst &TI);
+    void visitTruncInst(const llvm::TruncInst &TI);
 };
 
 class PointerDereference : public Defect, protected llvm::InstVisitor<PointerDereference> {
@@ -114,8 +114,8 @@ private:
 
     // Note: InstVisitor needs to be a friend here to call visit*.
     friend llvm::InstVisitor<PointerDereference>;
-    void visitLoadInst(llvm::LoadInst &LI);
-    void visitStoreInst(llvm::StoreInst &SI);
+    void visitLoadInst(const llvm::LoadInst &LI);
+    void visitStoreInst(const llvm::StoreInst &SI);
 };
 
 class BufferOverflow : public Defect, protected llvm::InstVisitor<BufferOverflow> {
@@ -129,8 +129,8 @@ private:
 
     // Note: InstVisitor needs to be a friend here to call visit*.
     friend llvm::InstVisitor<BufferOverflow>;
-    void visitLoadInst(llvm::LoadInst &LI);
-    void visitStoreInst(llvm::StoreInst &SI);
+    void visitLoadInst(const llvm::LoadInst &LI);
+    void visitStoreInst(const llvm::StoreInst &SI);
 };
 
 class UninitializedVariable : public Defect, protected llvm::InstVisitor<UninitializedVariable> {
@@ -144,8 +144,8 @@ private:
 
     // Note: InstVisitor needs to be a friend here to call visit*.
     friend llvm::InstVisitor<UninitializedVariable>;
-    void visitLoadInst(llvm::LoadInst &LI);
-    void visitStoreInst(llvm::StoreInst &SI);
+    void visitLoadInst(const llvm::LoadInst &LI);
+    void visitStoreInst(const llvm::StoreInst &SI);
 };
 
 class StackAddressEscape : public Defect, protected llvm::InstVisitor<StackAddressEscape> {
@@ -159,8 +159,8 @@ private:
 
     // Note: InstVisitor needs to be a friend here to call visit*.
     friend llvm::InstVisitor<StackAddressEscape>;
-    void visitStoreInst(llvm::StoreInst &SI);
-    void visitReturnInst(llvm::ReturnInst &RI);
+    void visitStoreInst(const llvm::StoreInst &SI);
+    void visitReturnInst(const llvm::ReturnInst &RI);
 };
 
 } // end namespace crtr
