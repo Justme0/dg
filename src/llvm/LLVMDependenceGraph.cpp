@@ -452,11 +452,14 @@ LLVMBBlock *LLVMDependenceGraph::build(llvm::BasicBlock& llvmBB)
 
             ext = new LLVMNode(phonyRet, true /* node owns the value -
                                                  it will delete it */);
-            addNode(ext);
             setExit(ext);
 
             LLVMBBlock *retBB = new LLVMBBlock(ext);
+            retBB->deleteNodesOnDestruction();
             setExitBB(retBB);
+            assert(!unifiedExitBB
+                   && "We should not have it assinged yet (or again) here");
+            unifiedExitBB = std::unique_ptr<LLVMBBlock>(retBB);
         }
 
         // add control dependence from this (return) node to EXIT node
@@ -474,7 +477,7 @@ LLVMBBlock *LLVMDependenceGraph::build(llvm::BasicBlock& llvmBB)
     return BB;
 }
 
-static void createSingleExitBB(LLVMDependenceGraph *graph)
+static LLVMBBlock *createSingleExitBB(LLVMDependenceGraph *graph)
 {
     llvm::UnreachableInst *ui
         = new llvm::UnreachableInst(graph->getModule()->getContext());
@@ -482,11 +485,11 @@ static void createSingleExitBB(LLVMDependenceGraph *graph)
     graph->addNode(exit);
     graph->setExit(exit);
     LLVMBBlock *exitBB = new LLVMBBlock(exit);
-    exitBB->setDG(graph);
     graph->setExitBB(exitBB);
 
     // XXX should we add predecessors? If the function does not
     // return anything, we don't need propagate anything outside...
+    return exitBB;
 }
 
 static void
@@ -605,8 +608,10 @@ bool LLVMDependenceGraph::build(llvm::Function *func)
 
     // if graph has no return inst, just create artificial exit node
     // and point there
-    if (!getExit())
-        createSingleExitBB(this);
+    if (!getExit()) {
+        assert(!unifiedExitBB && "We should not have exit BB");
+        unifiedExitBB = std::unique_ptr<LLVMBBlock>(createSingleExitBB(this));
+    }
 
     // check if we have everything
     assert(getEntry() && "Missing entry node");
